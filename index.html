@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoopMaker - 誰でも簡単に使えるループ波形エディタ</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LoopMaker</h1>
+            <p class="subtitle">誰でも簡単に使えるループ波形エディタ by <a href="https://github.com/sponsors/tatmos">tatmos</a></p>
+            <div class="app-version">v1.0.4</div>
+        </header>
+
+        <div class="controls-panel">
+            <div class="file-controls">
+                <label for="file-input" class="btn btn-primary">
+                    <!-- iOS系ブラウザでwav/mp3がグレーアウトしないように拡張子も明示 -->
+                    <input type="file" id="file-input" accept=".wav,.mp3,audio/*" hidden>
+                    波形をアップロード
+                </label>
+                <button id="save-btn" class="btn btn-secondary" disabled>ファイル保存</button>
+                <input type="text" id="filename-input" class="filename-input" placeholder="loopmaker_output.wav" value="loopmaker_output.wav" disabled>
+            </div>
+
+            <div class="playback-controls">
+                <button id="play-btn" class="btn btn-play" disabled>▶ 再生</button>
+                <button id="stop-btn" class="btn btn-stop" disabled>■ 停止</button>
+            </div>
+        </div>
+
+        <div class="waveform-container">
+            <div class="original-waveform-container">
+                <div class="track-header">
+                    <div class="track-label">元波形（利用範囲指定）</div>
+                </div>
+                <div class="waveform-wrapper drop-zone" id="original-drop-zone">
+                    <div class="drop-overlay" id="drop-overlay">波形をアップロード</div>
+                    <canvas id="original-waveform" class="waveform-canvas"></canvas>
+                </div>
+                <div id="ruler-original" class="time-ruler"></div>
+            </div>
+            
+            <div class="track-container">
+                <div class="track-sidebar">
+                    <div id="level-meter-track1" class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                    <button id="mute-track1" class="speaker-btn" title="トラック1のミュート (M)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="track-content">
+                    <div class="track-header">
+                        <div class="track-label">トラック1（フェードイン）</div>
+                    </div>
+                    <div class="waveform-wrapper">
+                        <canvas id="waveform-track1" class="waveform-canvas"></canvas>
+                        <canvas id="fade-ui-track1" class="fade-ui-canvas"></canvas>
+                    </div>
+                    <div id="ruler-track1" class="time-ruler"></div>
+                </div>
+            </div>
+
+            <div class="track-container">
+                <div class="track-sidebar">
+                    <div id="level-meter-track2" class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                    <button id="mute-track2" class="speaker-btn" title="トラック2のミュート (M)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="track-content">
+                    <div class="track-header">
+                        <div class="track-label">トラック2（フェードアウト）</div>
+                    </div>
+                    <div class="waveform-wrapper">
+                        <canvas id="waveform-track2" class="waveform-canvas"></canvas>
+                        <canvas id="fade-ui-track2" class="fade-ui-canvas"></canvas>
+                    </div>
+                    <div id="ruler-track2" class="time-ruler"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loop-controls">
+            <div class="loop-info">
+                <label for="overlap-rate">オーバーラップ率:</label>
+                <span id="overlap-rate-value">0%</span>
+            </div>
+            <div class="slider-container">
+                <input type="range" id="overlap-rate" class="slider" min="0" max="50" value="0" disabled>
+                <div class="slider-labels">
+                    <span>0%</span>
+                    <span>50%</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="status" class="status"></div>
+        
+        <!-- ファイル上書き確認ダイアログ -->
+        <div id="overwrite-dialog" class="overwrite-dialog hidden">
+            <div class="overwrite-dialog-content">
+                <h3>ファイルが既に存在します</h3>
+                <p id="overwrite-filename" class="overwrite-filename"></p>
+                <div class="overwrite-buttons">
+                    <button id="overwrite-confirm" class="btn btn-secondary">上書き</button>
+                    <button id="overwrite-rename" class="btn btn-primary">別名で保存</button>
+                    <button id="overwrite-cancel" class="btn btn-secondary">キャンセル</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="waveformDrawer.js"></script>
+    <script src="waveformRenderer.js"></script>
+    <script src="fadeCurves.js"></script>
+    <script src="track1Processor.js"></script>
+    <script src="track2Processor.js"></script>
+    <script src="audioPlayer.js"></script>
+    <script src="audioProcessor.js"></script>
+    <script src="originalWaveformViewer.js"></script>
+    <script src="fadeUIController.js"></script>
+    <script src="uiController.js"></script>
+    <script src="overlapRateController.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
