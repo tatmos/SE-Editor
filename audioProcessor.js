@@ -113,7 +113,7 @@ class AudioProcessor {
     }
 
     // ミックスしたバッファを保存
-    saveMixedBuffer(mixedBuffer, filename = 'loopmaker_output.wav') {
+    saveMixedBuffer(mixedBuffer, filename = 'se_editor_output.wav') {
         const wav = this.bufferToWav(mixedBuffer);
         const blob = new Blob([wav], { type: 'audio/wav' });
         const url = URL.createObjectURL(blob);

@@ -3,26 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoopMaker - 誰でも簡単に使える効果音エディタ</title>
+    <title>SE-Editor - 効果音エディタ</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>LoopMaker</h1>
-            <p class="subtitle">誰でも簡単に使える効果音エディタ by <a href="https://github.com/sponsors/tatmos">tatmos</a></p>
+            <h1>SE-Editor - 効果音エディタ</h1>
+            <p class="subtitle">Web上で動作する効果音エディタ by <a href="https://github.com/sponsors/tatmos">tatmos</a></p>
             <div class="app-version">v1.0.0</div>
         </header>
 
         <div class="controls-panel">
             <div class="file-controls">
-                <label for="file-input" class="btn btn-primary">
+                <label for="file-input-1" class="btn btn-primary">
                     <!-- iOS系ブラウザでwav/mp3がグレーアウトしないように拡張子も明示 -->
-                    <input type="file" id="file-input" accept=".wav,.mp3,audio/*" hidden>
-                    波形をアップロード
+                    <input type="file" id="file-input-1" accept=".wav,.mp3,audio/*" hidden>
+                    元波形1をアップロード
+                </label>
+                <label for="file-input-2" class="btn btn-primary">
+                    <!-- iOS系ブラウザでwav/mp3がグレーアウトしないように拡張子も明示 -->
+                    <input type="file" id="file-input-2" accept=".wav,.mp3,audio/*" hidden>
+                    元波形2をアップロード
                 </label>
                 <button id="save-btn" class="btn btn-secondary" disabled>ファイル保存</button>
-                <input type="text" id="filename-input" class="filename-input" placeholder="loopmaker_output.wav" value="loopmaker_output.wav" disabled>
+                <input type="text" id="filename-input" class="filename-input" placeholder="se_editor_output.wav" value="se_editor_output.wav" disabled>
             </div>
 
             <div class="playback-controls">
@@ -34,13 +39,24 @@
         <div class="waveform-container">
             <div class="original-waveform-container">
                 <div class="track-header">
-                    <div class="track-label">元波形（利用範囲指定）</div>
+                    <div class="track-label">元波形1（利用範囲指定）</div>
                 </div>
-                <div class="waveform-wrapper drop-zone" id="original-drop-zone">
-                    <div class="drop-overlay" id="drop-overlay">波形をアップロード</div>
-                    <canvas id="original-waveform" class="waveform-canvas"></canvas>
+                <div class="waveform-wrapper drop-zone" id="original-drop-zone-1">
+                    <div class="drop-overlay" id="drop-overlay-1">波形をアップロード</div>
+                    <canvas id="original-waveform-1" class="waveform-canvas"></canvas>
                 </div>
-                <div id="ruler-original" class="time-ruler"></div>
+                <div id="ruler-original-1" class="time-ruler"></div>
+            </div>
+            
+            <div class="original-waveform-container">
+                <div class="track-header">
+                    <div class="track-label">元波形2（利用範囲指定）</div>
+                </div>
+                <div class="waveform-wrapper drop-zone" id="original-drop-zone-2">
+                    <div class="drop-overlay" id="drop-overlay-2">波形をアップロード</div>
+                    <canvas id="original-waveform-2" class="waveform-canvas"></canvas>
+                </div>
+                <div id="ruler-original-2" class="time-ruler"></div>
             </div>
             
             <div class="track-container">
@@ -57,7 +73,7 @@
                 </div>
                 <div class="track-content">
                     <div class="track-header">
-                        <div class="track-label">トラック1（フェードイン）</div>
+                        <div class="track-label">トラック1</div>
                     </div>
                     <div class="waveform-wrapper">
                         <canvas id="waveform-track1" class="waveform-canvas"></canvas>
@@ -81,7 +97,7 @@
                 </div>
                 <div class="track-content">
                     <div class="track-header">
-                        <div class="track-label">トラック2（フェードアウト）</div>
+                        <div class="track-label">トラック2</div>
                     </div>
                     <div class="waveform-wrapper">
                         <canvas id="waveform-track2" class="waveform-canvas"></canvas>
@@ -92,16 +108,96 @@
             </div>
         </div>
 
-        <div class="loop-controls">
-            <div class="loop-info">
-                <label for="overlap-rate">オーバーラップ率:</label>
-                <span id="overlap-rate-value">0%</span>
+        <!-- ピッチトランスポーズコントロール -->
+        <div class="pitch-controls">
+            <div class="pitch-control-group">
+                <label for="pitch-transpose-track1">トラック1 移調:</label>
+                <input type="number" id="pitch-transpose-track1" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
+                <span>セミトーン</span>
+                <input type="number" id="pitch-cent-track1" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
+                <span>cent</span>
             </div>
-            <div class="slider-container">
-                <input type="range" id="overlap-rate" class="slider" min="0" max="50" value="0" disabled>
-                <div class="slider-labels">
-                    <span>0%</span>
-                    <span>50%</span>
+            <div class="pitch-control-group">
+                <label for="pitch-transpose-track2">トラック2 移調:</label>
+                <input type="number" id="pitch-transpose-track2" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
+                <span>セミトーン</span>
+                <input type="number" id="pitch-cent-track2" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
+                <span>cent</span>
+            </div>
+        </div>
+
+        <!-- Analyzer -->
+        <div class="analyzer-container">
+            <div class="track-header">
+                <div class="track-label">Analyzer（Mix後の周波数表示）</div>
+            </div>
+            <canvas id="analyzer-canvas" class="analyzer-canvas"></canvas>
+        </div>
+
+        <!-- 3-Band MultiBand Comp -->
+        <div class="multiband-comp-container">
+            <div class="track-header">
+                <div class="track-label">3-Band MultiBand Up/Down Comp</div>
+            </div>
+            <div class="multiband-controls">
+                <div class="band-control">
+                    <label>H (High)</label>
+                    <div class="comp-row">
+                        <label>Up:</label>
+                        <input type="range" id="comp-h-up" class="slider" min="0" max="100" value="0" disabled>
+                        <span id="comp-h-up-value">0%</span>
+                    </div>
+                    <div class="comp-row">
+                        <label>Down:</label>
+                        <input type="range" id="comp-h-down" class="slider" min="0" max="100" value="0" disabled>
+                        <span id="comp-h-down-value">0%</span>
+                    </div>
+                </div>
+                <div class="band-control">
+                    <label>M (Mid)</label>
+                    <div class="comp-row">
+                        <label>Up:</label>
+                        <input type="range" id="comp-m-up" class="slider" min="0" max="100" value="0" disabled>
+                        <span id="comp-m-up-value">0%</span>
+                    </div>
+                    <div class="comp-row">
+                        <label>Down:</label>
+                        <input type="range" id="comp-m-down" class="slider" min="0" max="100" value="0" disabled>
+                        <span id="comp-m-down-value">0%</span>
+                    </div>
+                </div>
+                <div class="band-control">
+                    <label>L (Low)</label>
+                    <div class="comp-row">
+                        <label>Up:</label>
+                        <input type="range" id="comp-l-up" class="slider" min="0" max="100" value="0" disabled>
+                        <span id="comp-l-up-value">0%</span>
+                    </div>
+                    <div class="comp-row">
+                        <label>Down:</label>
+                        <input type="range" id="comp-l-down" class="slider" min="0" max="100" value="0" disabled>
+                        <span id="comp-l-down-value">0%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="comp-mix-control">
+                <label for="comp-mix">Mix:</label>
+                <input type="range" id="comp-mix" class="slider" min="0" max="100" value="100" disabled>
+                <span id="comp-mix-value">100%</span>
+            </div>
+        </div>
+
+        <!-- 空間デザイン -->
+        <div class="spatial-design-container">
+            <div class="track-header">
+                <div class="track-label">空間デザイン（X-Z平面）</div>
+            </div>
+            <div class="spatial-controls">
+                <canvas id="spatial-canvas" class="spatial-canvas"></canvas>
+                <div class="spatial-mix-control">
+                    <label for="reverb-mix">残響効果 Mix:</label>
+                    <input type="range" id="reverb-mix" class="slider" min="0" max="100" value="0" disabled>
+                    <span id="reverb-mix-value">0%</span>
                 </div>
             </div>
         </div>
@@ -132,8 +228,11 @@
     <script src="audioProcessor.js"></script>
     <script src="originalWaveformViewer.js"></script>
     <script src="fadeUIController.js"></script>
+    <script src="regionController.js"></script>
+    <script src="analyzer.js"></script>
+    <script src="multibandComp.js"></script>
+    <script src="spatialDesign.js"></script>
     <script src="uiController.js"></script>
-    <script src="overlapRateController.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

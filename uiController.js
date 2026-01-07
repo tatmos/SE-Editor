@@ -7,15 +7,18 @@ class UIController {
     }
 
     initializeElements() {
-        this.fileInput = document.getElementById('file-input');
+        this.fileInput1 = document.getElementById('file-input-1');
+        this.fileInput2 = document.getElementById('file-input-2');
         this.saveBtn = document.getElementById('save-btn');
         this.playBtn = document.getElementById('play-btn');
         this.stopBtn = document.getElementById('stop-btn');
         this.status = document.getElementById('status');
         this.muteTrack1Btn = document.getElementById('mute-track1');
         this.muteTrack2Btn = document.getElementById('mute-track2');
-        this.dropZone = document.getElementById('original-drop-zone');
-        this.dropOverlay = document.getElementById('drop-overlay');
+        this.dropZone1 = document.getElementById('original-drop-zone-1');
+        this.dropZone2 = document.getElementById('original-drop-zone-2');
+        this.dropOverlay1 = document.getElementById('drop-overlay-1');
+        this.dropOverlay2 = document.getElementById('drop-overlay-2');
         this.waveformTrack1 = document.getElementById('waveform-track1');
         this.waveformTrack2 = document.getElementById('waveform-track2');
         this.filenameInput = document.getElementById('filename-input');
@@ -42,36 +45,66 @@ class UIController {
     }
 
     setupEventListeners() {
-        this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+        this.fileInput1.addEventListener('change', (e) => this.handleFileUpload(e, 1));
+        this.fileInput2.addEventListener('change', (e) => this.handleFileUpload(e, 2));
         this.saveBtn.addEventListener('click', () => this.saveFile());
         this.playBtn.addEventListener('click', () => this.playPreview());
         this.stopBtn.addEventListener('click', () => this.stopPreview());
         this.muteTrack1Btn.addEventListener('click', () => this.toggleMuteTrack1());
         this.muteTrack2Btn.addEventListener('click', () => this.toggleMuteTrack2());
 
-        if (this.dropZone) {
+        // ドロップゾーン1（元波形1）
+        if (this.dropZone1) {
             ['dragenter', 'dragover'].forEach(evt => {
-                this.dropZone.addEventListener(evt, (e) => {
+                this.dropZone1.addEventListener(evt, (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.dropZone.classList.add('dragover');
+                    this.dropZone1.classList.add('dragover');
                 });
             });
 
             ['dragleave', 'drop'].forEach(evt => {
-                this.dropZone.addEventListener(evt, (e) => {
+                this.dropZone1.addEventListener(evt, (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.dropZone.classList.remove('dragover');
+                    this.dropZone1.classList.remove('dragover');
                 });
             });
 
-            this.dropZone.addEventListener('drop', (e) => {
+            this.dropZone1.addEventListener('drop', (e) => {
                 const files = e.dataTransfer?.files;
                 if (files && files.length > 0) {
                     // 同じファイルを再度読み込めるようにリセット
-                    this.fileInput.value = '';
-                    this.loadFile(files[0]);
+                    this.fileInput1.value = '';
+                    this.loadFile(files[0], 1);
+                }
+            });
+        }
+
+        // ドロップゾーン2（元波形2）
+        if (this.dropZone2) {
+            ['dragenter', 'dragover'].forEach(evt => {
+                this.dropZone2.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.dropZone2.classList.add('dragover');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(evt => {
+                this.dropZone2.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.dropZone2.classList.remove('dragover');
+                });
+            });
+
+            this.dropZone2.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    // 同じファイルを再度読み込めるようにリセット
+                    this.fileInput2.value = '';
+                    this.loadFile(files[0], 2);
                 }
             });
         }
@@ -119,17 +152,17 @@ class UIController {
         });
     }
 
-    async handleFileUpload(event) {
+    async handleFileUpload(event, trackNumber) {
         const file = event.target.files[0];
         if (!file) return;
 
-        await this.loadFile(file);
+        await this.loadFile(file, trackNumber);
     }
 
-    async loadFile(file) {
+    async loadFile(file, trackNumber) {
         if (!file) return;
 
-        this.showStatus('ファイルを読み込み中...', 'info');
+        this.showStatus(`元波形${trackNumber}を読み込み中...`, 'info');
 
         try {
             // 再生中なら停止してから読み込み
@@ -140,8 +173,48 @@ class UIController {
                 this.stopBtn.disabled = true;
             }
 
-            // ファイル名を保存用ファイル名に反映
-            if (this.filenameInput && file && file.name) {
+            // AudioContextがまだ作成されていない場合は作成
+            if (!this.loopMaker.audioContext) {
+                this.loopMaker.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.loopMaker.audioProcessor = new AudioProcessor(this.loopMaker.audioContext);
+                this.loopMaker.audioPlayer = new AudioPlayer(this.loopMaker.audioContext);
+            }
+
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await this.loopMaker.audioContext.decodeAudioData(arrayBuffer);
+            
+            // トラック番号に応じてバッファを設定
+            if (trackNumber === 1) {
+                this.loopMaker.originalBuffer1 = audioBuffer;
+                // 元波形1を表示
+                if (this.loopMaker.originalWaveformViewer1) {
+                    this.loopMaker.originalWaveformViewer1.setAudioBuffer(audioBuffer);
+                    this.loopMaker.useRangeStart1 = 0;
+                    this.loopMaker.useRangeEnd1 = audioBuffer.duration;
+                    this.loopMaker.originalWaveformViewer1.setRange(this.loopMaker.useRangeStart1, this.loopMaker.useRangeEnd1);
+                    if (this.dropOverlay1) {
+                        this.dropOverlay1.classList.add('hidden');
+                    }
+                }
+            } else if (trackNumber === 2) {
+                this.loopMaker.originalBuffer2 = audioBuffer;
+                // 元波形2を表示
+                if (this.loopMaker.originalWaveformViewer2) {
+                    this.loopMaker.originalWaveformViewer2.setAudioBuffer(audioBuffer);
+                    this.loopMaker.useRangeStart2 = 0;
+                    this.loopMaker.useRangeEnd2 = audioBuffer.duration;
+                    this.loopMaker.originalWaveformViewer2.setRange(this.loopMaker.useRangeStart2, this.loopMaker.useRangeEnd2);
+                    if (this.dropOverlay2) {
+                        this.dropOverlay2.classList.add('hidden');
+                    }
+                }
+            }
+            
+            // エフェクトを初期化
+            this.loopMaker.initializeEffects();
+            
+            // ファイル名を保存用ファイル名に反映（最初のファイルのみ）
+            if (this.filenameInput && file && file.name && !this.filenameInput.value) {
                 const originalName = file.name;
                 // 拡張子を .wav に統一（元が .wav ならそのまま）
                 const dotIndex = originalName.lastIndexOf('.');
@@ -153,26 +226,9 @@ class UIController {
                 this.filenameInput.value = newName;
                 this.filenameInput.disabled = false;
             }
-
-            const arrayBuffer = await file.arrayBuffer();
-            this.loopMaker.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.loopMaker.originalBuffer = await this.loopMaker.audioContext.decodeAudioData(arrayBuffer);
-            this.loopMaker.audioProcessor = new AudioProcessor(this.loopMaker.audioContext);
-            this.loopMaker.audioPlayer = new AudioPlayer(this.loopMaker.audioContext);
             
-            // 元波形を表示
-            if (this.loopMaker.originalWaveformViewer) {
-                this.loopMaker.originalWaveformViewer.setAudioBuffer(this.loopMaker.originalBuffer);
-                this.loopMaker.useRangeStart = 0;
-                this.loopMaker.useRangeEnd = this.loopMaker.originalBuffer.duration;
-                this.loopMaker.originalWaveformViewer.setRange(this.loopMaker.useRangeStart, this.loopMaker.useRangeEnd);
-                if (this.dropOverlay) {
-                    this.dropOverlay.classList.add('hidden');
-                }
-            }
-            
-            // 初期オーバーラップ率を0に設定
-            if (this.loopMaker.overlapRateController) {
+            // 初期オーバーラップ率を0に設定（最初のファイルのみ）
+            if (this.loopMaker.overlapRateController && !this.loopMaker.originalBuffer1 && !this.loopMaker.originalBuffer2) {
                 this.loopMaker.overlapRateController.setValue(0);
             }
             
@@ -181,15 +237,15 @@ class UIController {
             
             this.loopMaker.drawWaveforms();
             this.enableControls();
-            this.showStatus('ファイルの読み込みが完了しました', 'success');
+            this.showStatus(`元波形${trackNumber}の読み込みが完了しました`, 'success');
         } catch (error) {
-            this.showStatus('エラー: ' + error.message, 'error');
+            this.showStatus(`エラー: ${error.message}`, 'error');
             console.error(error);
         }
     }
 
     togglePlayback() {
-        if (!this.loopMaker.originalBuffer || !this.loopMaker.audioPlayer) return;
+        if ((!this.loopMaker.originalBuffer1 && !this.loopMaker.originalBuffer2) || !this.loopMaker.audioPlayer) return;
         
         if (this.loopMaker.audioPlayer.isPlaying) {
             this.stopPreview();
@@ -199,7 +255,7 @@ class UIController {
     }
 
     async playPreview() {
-        if (!this.loopMaker.originalBuffer || !this.loopMaker.audioPlayer || !this.loopMaker.track1Buffer || !this.loopMaker.track2Buffer) return;
+        if ((!this.loopMaker.originalBuffer1 && !this.loopMaker.originalBuffer2) || !this.loopMaker.audioPlayer || !this.loopMaker.track1Buffer || !this.loopMaker.track2Buffer) return;
 
         try {
             this.playBtn.disabled = true;
@@ -208,6 +264,12 @@ class UIController {
             // トラック1と2の加工後のバッファを再生
             this.loopMaker.audioPlayer.playPreviewWithBuffers(this.loopMaker.track1Buffer, this.loopMaker.track2Buffer);
             this.loopMaker.startPlaybackAnimation();
+            
+            // Analyzerを開始
+            if (this.loopMaker.analyzer) {
+                this.loopMaker.analyzer.start();
+            }
+            
             this.showStatus('再生中...', 'info');
         } catch (error) {
             this.showStatus('再生エラー: ' + error.message, 'error');
@@ -232,9 +294,9 @@ class UIController {
 
         try {
             // ファイル名を取得
-            let filename = this.filenameInput ? this.filenameInput.value.trim() : 'loopmaker_output.wav';
+            let filename = this.filenameInput ? this.filenameInput.value.trim() : 'se_editor_output.wav';
             if (!filename) {
-                filename = 'loopmaker_output.wav';
+                filename = 'se_editor_output.wav';
             }
             
             // .wav拡張子がない場合は追加
@@ -300,6 +362,22 @@ class UIController {
         }
         if (this.loopMaker.overlapRateController) {
             this.loopMaker.overlapRateController.enable();
+        }
+        
+        // ピッチコントロールを有効化
+        const pitchInputs = document.querySelectorAll('.pitch-input');
+        pitchInputs.forEach(input => {
+            input.disabled = false;
+        });
+        
+        // MultiBand Compを有効化
+        if (this.loopMaker.multibandComp) {
+            this.loopMaker.multibandComp.enable();
+        }
+        
+        // Spatial Designを有効化
+        if (this.loopMaker.spatialDesign) {
+            this.loopMaker.spatialDesign.enable();
         }
     }
 
