@@ -66,6 +66,13 @@ class LoopMaker {
         this.waveformRenderer = new WaveformRenderer(canvas1, canvas2, ruler1, ruler2);
         this.fadeUIController = new FadeUIController(this, fadeCanvas1, fadeCanvas2);
         
+        // リージョンコントローラーを初期化
+        this.regionController1 = new RegionController(this, canvas1, 1);
+        this.regionController2 = new RegionController(this, canvas2, 2);
+        
+        // トラックの表示範囲（同期用）
+        this.trackDisplayDuration = 0;
+        
         // エフェクトのUIとProcessorを初期化（audioContextとaudioProcessorは後で設定）
         this.pitchTransposeUI = null;
         this.pitchTransposeProcessor = null;
@@ -91,6 +98,19 @@ class LoopMaker {
             }
         }
         
+        // 元波形1と元波形2の選択範囲の長さを計算
+        const range1Duration = this.originalBuffer1 ? (this.useRangeEnd1 - this.useRangeStart1) : 0;
+        const range2Duration = this.originalBuffer2 ? (this.useRangeEnd2 - this.useRangeStart2) : 0;
+        
+        // 長い方を基準にする
+        const baseDuration = Math.max(range1Duration, range2Duration);
+        
+        // どちらかのバッファがない場合は処理をスキップ
+        if (baseDuration <= 0) return;
+        
+        // トラックの表示範囲を同期（長い方を基準）
+        this.trackDisplayDuration = baseDuration;
+        
         // 元波形1から利用範囲を抽出（トラック1用）
         let useRangeBuffer1 = null;
         if (this.originalBuffer1) {
@@ -111,10 +131,7 @@ class LoopMaker {
             );
         }
         
-        // どちらかのバッファがない場合は処理をスキップ
-        if (!useRangeBuffer1 && !useRangeBuffer2) return;
-        
-        // トラック1の加工後のバッファを生成（元波形1を使用）
+        // トラック1の加工後のバッファを生成（元波形1を使用、baseDurationに合わせる）
         if (useRangeBuffer1) {
             // ピッチシフトを適用
             let processedBuffer = useRangeBuffer1;
@@ -127,15 +144,24 @@ class LoopMaker {
                 0, // overlapRateは削除されたため0に
                 this.fadeSettingsTrack1
             );
+            
+            // baseDurationに合わせて調整（必要に応じて）
+            if (this.track1Buffer.duration < baseDuration) {
+                // バッファを延長（無音で埋める）
+                const extendedBuffer = this.extendBuffer(this.track1Buffer, baseDuration);
+                this.track1Buffer = extendedBuffer;
+            } else if (this.track1Buffer.duration > baseDuration) {
+                // バッファを切り詰める
+                const trimmedBuffer = this.trimBuffer(this.track1Buffer, baseDuration);
+                this.track1Buffer = trimmedBuffer;
+            }
         } else {
-            // 元波形1がない場合は空のバッファを作成
+            // 元波形1がない場合は空のバッファを作成（ステレオに統一）
             const sampleRate = this.audioContext.sampleRate;
-            const numChannels = useRangeBuffer2 ? useRangeBuffer2.numberOfChannels : 2;
-            const duration = useRangeBuffer2 ? useRangeBuffer2.duration : 1.0;
-            this.track1Buffer = this.audioContext.createBuffer(numChannels, Math.floor(duration * sampleRate), sampleRate);
+            this.track1Buffer = this.audioContext.createBuffer(2, Math.floor(baseDuration * sampleRate), sampleRate);
         }
         
-        // トラック2の加工後のバッファを生成（元波形2を使用、トラック1と同じサイズにする）
+        // トラック2の加工後のバッファを生成（元波形2を使用、baseDurationに合わせる）
         if (useRangeBuffer2) {
             // ピッチシフトを適用
             let processedBuffer = useRangeBuffer2;
@@ -146,15 +172,24 @@ class LoopMaker {
             this.track2Buffer = this.audioProcessor.track2Processor.createSaveBuffer(
                 processedBuffer, 
                 0, // overlapRateは削除されたため0に
-                this.track1Buffer.duration,
+                baseDuration,
                 this.fadeSettingsTrack2
             );
+            
+            // baseDurationに合わせて調整（必要に応じて）
+            if (this.track2Buffer.duration < baseDuration) {
+                // バッファを延長（無音で埋める）
+                const extendedBuffer = this.extendBuffer(this.track2Buffer, baseDuration);
+                this.track2Buffer = extendedBuffer;
+            } else if (this.track2Buffer.duration > baseDuration) {
+                // バッファを切り詰める
+                const trimmedBuffer = this.trimBuffer(this.track2Buffer, baseDuration);
+                this.track2Buffer = trimmedBuffer;
+            }
         } else {
-            // 元波形2がない場合は空のバッファを作成
+            // 元波形2がない場合は空のバッファを作成（ステレオに統一）
             const sampleRate = this.audioContext.sampleRate;
-            const numChannels = useRangeBuffer1 ? useRangeBuffer1.numberOfChannels : 2;
-            const duration = this.track1Buffer.duration;
-            this.track2Buffer = this.audioContext.createBuffer(numChannels, Math.floor(duration * sampleRate), sampleRate);
+            this.track2Buffer = this.audioContext.createBuffer(2, Math.floor(baseDuration * sampleRate), sampleRate);
         }
         
         // トラック1と2をミックスしたバッファを生成
@@ -171,6 +206,59 @@ class LoopMaker {
                 this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, seekTime);
             }
         }
+    }
+    
+    // バッファを延長（無音で埋める）
+    extendBuffer(audioBuffer, targetDuration) {
+        const sampleRate = this.audioContext.sampleRate;
+        const numChannels = audioBuffer.numberOfChannels;
+        const currentLength = audioBuffer.length;
+        const targetLength = Math.floor(targetDuration * sampleRate);
+        
+        if (targetLength <= currentLength) {
+            return audioBuffer;
+        }
+        
+        const extendedBuffer = this.audioContext.createBuffer(numChannels, targetLength, sampleRate);
+        
+        for (let channel = 0; channel < numChannels; channel++) {
+            const inputData = audioBuffer.getChannelData(channel);
+            const outputData = extendedBuffer.getChannelData(channel);
+            
+            // 既存のデータをコピー
+            for (let i = 0; i < currentLength; i++) {
+                outputData[i] = inputData[i];
+            }
+            
+            // 残りを無音で埋める（既に0で初期化されている）
+        }
+        
+        return extendedBuffer;
+    }
+    
+    // バッファを切り詰める
+    trimBuffer(audioBuffer, targetDuration) {
+        const sampleRate = this.audioContext.sampleRate;
+        const numChannels = audioBuffer.numberOfChannels;
+        const targetLength = Math.floor(targetDuration * sampleRate);
+        
+        if (targetLength >= audioBuffer.length) {
+            return audioBuffer;
+        }
+        
+        const trimmedBuffer = this.audioContext.createBuffer(numChannels, targetLength, sampleRate);
+        
+        for (let channel = 0; channel < numChannels; channel++) {
+            const inputData = audioBuffer.getChannelData(channel);
+            const outputData = trimmedBuffer.getChannelData(channel);
+            
+            // 指定された長さまでコピー
+            for (let i = 0; i < targetLength; i++) {
+                outputData[i] = inputData[i];
+            }
+        }
+        
+        return trimmedBuffer;
     }
 
     // 波形上クリックによるシーク
@@ -193,9 +281,17 @@ class LoopMaker {
     drawWaveforms() {
         if (!this.track1Buffer || !this.track2Buffer || !this.waveformRenderer) return;
         const currentTime = this.audioPlayer ? this.audioPlayer.getCurrentPlaybackTime() : null;
-        this.waveformRenderer.render(this.track1Buffer, this.track2Buffer, currentTime);
+        // トラック1とトラック2の表示範囲を同期（trackDisplayDurationを使用）
+        this.waveformRenderer.render(this.track1Buffer, this.track2Buffer, currentTime, this.trackDisplayDuration);
         if (this.fadeUIController) {
             this.fadeUIController.render();
+        }
+        // リージョンを描画
+        if (this.regionController1) {
+            this.regionController1.render();
+        }
+        if (this.regionController2) {
+            this.regionController2.render();
         }
     }
 

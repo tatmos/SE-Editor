@@ -87,18 +87,78 @@ class AudioProcessor {
     }
 
 
+    // バッファをステレオ（2チャンネル）に変換
+    convertToStereo(audioBuffer) {
+        if (!audioBuffer) return null;
+        
+        const sampleRate = audioBuffer.sampleRate;
+        const numChannels = audioBuffer.numberOfChannels;
+        const length = audioBuffer.length;
+        
+        // 既にステレオの場合はそのまま返す
+        if (numChannels === 2) {
+            return audioBuffer;
+        }
+        
+        // ステレオバッファを作成
+        const stereoBuffer = this.audioContext.createBuffer(2, length, sampleRate);
+        
+        if (numChannels === 1) {
+            // モノラルからステレオに変換（同じチャンネルを2つにコピー）
+            const monoData = audioBuffer.getChannelData(0);
+            const leftData = stereoBuffer.getChannelData(0);
+            const rightData = stereoBuffer.getChannelData(1);
+            
+            for (let i = 0; i < length; i++) {
+                leftData[i] = monoData[i];
+                rightData[i] = monoData[i];
+            }
+        } else {
+            // 3チャンネル以上の場合は、最初の2チャンネルを使用
+            const leftData = stereoBuffer.getChannelData(0);
+            const rightData = stereoBuffer.getChannelData(1);
+            
+            if (numChannels >= 1) {
+                const inputLeft = audioBuffer.getChannelData(0);
+                for (let i = 0; i < length; i++) {
+                    leftData[i] = inputLeft[i];
+                }
+            }
+            
+            if (numChannels >= 2) {
+                const inputRight = audioBuffer.getChannelData(1);
+                for (let i = 0; i < length; i++) {
+                    rightData[i] = inputRight[i];
+                }
+            } else {
+                // 右チャンネルがない場合は左チャンネルをコピー
+                const inputLeft = audioBuffer.getChannelData(0);
+                for (let i = 0; i < length; i++) {
+                    rightData[i] = inputLeft[i];
+                }
+            }
+        }
+        
+        return stereoBuffer;
+    }
+
     // トラック1と2をミックスしたバッファを生成
     mixBuffers(track1Buffer, track2Buffer) {
+        if (!track1Buffer || !track2Buffer) return null;
+        
         const sampleRate = track1Buffer.sampleRate;
-        const numChannels = track1Buffer.numberOfChannels;
+        
+        // 両方のバッファをステレオに統一
+        const stereo1 = this.convertToStereo(track1Buffer);
+        const stereo2 = this.convertToStereo(track2Buffer);
         
         // 2つのバッファの長い方を基準にする
-        const maxLength = Math.max(track1Buffer.length, track2Buffer.length);
-        const mixedBuffer = this.audioContext.createBuffer(numChannels, maxLength, sampleRate);
+        const maxLength = Math.max(stereo1.length, stereo2.length);
+        const mixedBuffer = this.audioContext.createBuffer(2, maxLength, sampleRate);
 
-        for (let channel = 0; channel < numChannels; channel++) {
-            const track1Data = track1Buffer.getChannelData(channel);
-            const track2Data = track2Buffer.getChannelData(channel);
+        for (let channel = 0; channel < 2; channel++) {
+            const track1Data = stereo1.getChannelData(channel);
+            const track2Data = stereo2.getChannelData(channel);
             const mixedData = mixedBuffer.getChannelData(channel);
 
             for (let i = 0; i < maxLength; i++) {

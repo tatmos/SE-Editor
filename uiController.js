@@ -213,6 +213,12 @@ class UIController {
             // エフェクトを初期化
             this.loopMaker.initializeEffects();
             
+            // バッファを生成（長い方を基準にする）
+            this.loopMaker.updateBuffers();
+            
+            // 元波形を追加したタイミングで、それぞれのトラックの0ポジションにリージョンを追加
+            this.addRegionsForTracks();
+            
             // ファイル名を保存用ファイル名に反映（最初のファイルのみ）
             if (this.filenameInput && file && file.name && !this.filenameInput.value) {
                 const originalName = file.name;
@@ -226,14 +232,6 @@ class UIController {
                 this.filenameInput.value = newName;
                 this.filenameInput.disabled = false;
             }
-            
-            // 初期オーバーラップ率を0に設定（最初のファイルのみ）
-            if (this.loopMaker.overlapRateController && !this.loopMaker.originalBuffer1 && !this.loopMaker.originalBuffer2) {
-                this.loopMaker.overlapRateController.setValue(0);
-            }
-            
-            // バッファを生成
-            this.loopMaker.updateBuffers();
             
             this.loopMaker.drawWaveforms();
             this.enableControls();
@@ -484,6 +482,39 @@ class UIController {
         } else {
             button.classList.remove('muted');
             button.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+        }
+    }
+    
+    // 各トラックの0ポジションにリージョンを追加
+    addRegionsForTracks() {
+        if (!this.loopMaker.trackDisplayDuration || this.loopMaker.trackDisplayDuration <= 0) return;
+        
+        // トラック1にリージョンを追加（元波形1がある場合）
+        if (this.loopMaker.originalBuffer1 && this.loopMaker.regionController1) {
+            const range1Duration = this.loopMaker.useRangeEnd1 - this.loopMaker.useRangeStart1;
+            // 既存のリージョンをクリア
+            this.loopMaker.regionController1.clearRegions();
+            // 0ポジションにリージョンを追加
+            this.loopMaker.regionController1.addRegion(
+                0,
+                range1Duration,
+                this.loopMaker.originalBuffer1,
+                this.loopMaker.useRangeStart1
+            );
+        }
+        
+        // トラック2にリージョンを追加（元波形2がある場合）
+        if (this.loopMaker.originalBuffer2 && this.loopMaker.regionController2) {
+            const range2Duration = this.loopMaker.useRangeEnd2 - this.loopMaker.useRangeStart2;
+            // 既存のリージョンをクリア
+            this.loopMaker.regionController2.clearRegions();
+            // 0ポジションにリージョンを追加
+            this.loopMaker.regionController2.addRegion(
+                0,
+                range2Duration,
+                this.loopMaker.originalBuffer2,
+                this.loopMaker.useRangeStart2
+            );
         }
     }
 }

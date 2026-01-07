@@ -9,7 +9,7 @@ class WaveformRenderer {
         this.ruler2 = ruler2;
     }
 
-    render(track1Buffer, track2Buffer, currentPlaybackTime = null) {
+    render(track1Buffer, track2Buffer, currentPlaybackTime = null, displayDuration = null) {
         if (!track1Buffer || !track2Buffer) return;
 
         const width = this.canvas1.width = this.canvas1.offsetWidth;
@@ -17,22 +17,22 @@ class WaveformRenderer {
         this.canvas2.width = width;
         this.canvas2.height = height;
 
-        // トラック1の加工後のバッファの長さを取得
-        const track1Duration = track1Buffer.duration;
+        // 表示範囲を取得（指定されていない場合はトラック1の長さを使用）
+        const totalDuration = displayDuration !== null ? displayDuration : track1Buffer.duration;
 
         // トラック1: 加工後のバッファを表示
-        this.drawTrack1(track1Buffer, track1Duration, width, height);
+        this.drawTrack1(track1Buffer, totalDuration, width, height);
         
-        // トラック2: 加工後のバッファを表示
-        this.drawTrack2(track2Buffer, track1Duration, width, height);
+        // トラック2: 加工後のバッファを表示（同期された表示範囲を使用）
+        this.drawTrack2(track2Buffer, totalDuration, width, height);
         
         // 再生位置ラインを描画
         if (currentPlaybackTime !== null) {
-            this.drawPlaybackPosition(currentPlaybackTime, track1Duration, width, height);
+            this.drawPlaybackPosition(currentPlaybackTime, totalDuration, width, height);
         }
         
         // タイムルーラーを描画
-        this.drawTimeRuler(track1Duration, width);
+        this.drawTimeRuler(totalDuration, width);
     }
 
     drawPlaybackPosition(currentTime, totalDuration, width, height) {
