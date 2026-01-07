@@ -66,22 +66,15 @@ class LoopMaker {
         this.waveformRenderer = new WaveformRenderer(canvas1, canvas2, ruler1, ruler2);
         this.fadeUIController = new FadeUIController(this, fadeCanvas1, fadeCanvas2);
         
-        // Analyzer、MultiBand Comp、Spatial Designを初期化
-        const analyzerCanvas = document.getElementById('analyzer-canvas');
-        const spatialCanvas = document.getElementById('spatial-canvas');
-        
-        // 注意: audioPlayerは後で設定されるため、初期化は後で行う
-        this.analyzer = null;
-        this.multibandComp = null;
-        this.spatialDesign = null;
-        
-        if (analyzerCanvas) {
-            // AnalyzerはaudioPlayerが作成された後に初期化
-        }
-        
-        if (spatialCanvas) {
-            // SpatialDesignはaudioPlayerが作成された後に初期化
-        }
+        // エフェクトのUIとProcessorを初期化（audioContextとaudioProcessorは後で設定）
+        this.pitchTransposeUI = null;
+        this.pitchTransposeProcessor = null;
+        this.analyzerUI = null;
+        this.analyzerProcessor = null;
+        this.multibandCompUI = null;
+        this.multibandCompProcessor = null;
+        this.spatialDesignUI = null;
+        this.spatialDesignProcessor = null;
     }
 
     updateBuffers() {
@@ -123,9 +116,15 @@ class LoopMaker {
         
         // トラック1の加工後のバッファを生成（元波形1を使用）
         if (useRangeBuffer1) {
+            // ピッチシフトを適用
+            let processedBuffer = useRangeBuffer1;
+            if (this.pitchTransposeProcessor) {
+                processedBuffer = this.pitchTransposeProcessor.applyPitchShift(processedBuffer, 1);
+            }
+            
             this.track1Buffer = this.audioProcessor.track1Processor.createSaveBuffer(
-                useRangeBuffer1, 
-                this.overlapRate,
+                processedBuffer, 
+                0, // overlapRateは削除されたため0に
                 this.fadeSettingsTrack1
             );
         } else {
@@ -138,9 +137,15 @@ class LoopMaker {
         
         // トラック2の加工後のバッファを生成（元波形2を使用、トラック1と同じサイズにする）
         if (useRangeBuffer2) {
+            // ピッチシフトを適用
+            let processedBuffer = useRangeBuffer2;
+            if (this.pitchTransposeProcessor) {
+                processedBuffer = this.pitchTransposeProcessor.applyPitchShift(processedBuffer, 2);
+            }
+            
             this.track2Buffer = this.audioProcessor.track2Processor.createSaveBuffer(
-                useRangeBuffer2, 
-                this.overlapRate,
+                processedBuffer, 
+                0, // overlapRateは削除されたため0に
                 this.track1Buffer.duration,
                 this.fadeSettingsTrack2
             );
@@ -256,32 +261,39 @@ class LoopMaker {
         this.drawWaveforms();
         
         // Analyzerを停止
-        if (this.analyzer) {
-            this.analyzer.stop();
+        if (this.analyzerUI) {
+            this.analyzerUI.stop();
         }
     }
     
-    // Analyzer、MultiBand Comp、Spatial Designを初期化
+    // エフェクトのUIとProcessorを初期化
     initializeEffects() {
-        if (!this.audioPlayer || !this.audioContext) return;
+        if (!this.audioContext || !this.audioProcessor) return;
         
+        // ピッチトランスポーズ
+        if (!this.pitchTransposeUI) {
+            this.pitchTransposeProcessor = new PitchTransposeProcessor(this.audioContext);
+            this.pitchTransposeUI = new PitchTransposeUI(this.pitchTransposeProcessor);
+        }
+        
+        // Analyzer
         const analyzerCanvas = document.getElementById('analyzer-canvas');
+        if (analyzerCanvas && !this.analyzerUI) {
+            this.analyzerProcessor = new AnalyzerProcessor(this.audioContext);
+            this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
+        }
+        
+        // MultiBand Comp
+        if (!this.multibandCompUI) {
+            this.multibandCompProcessor = new MultiBandCompProcessor(this.audioContext);
+            this.multibandCompUI = new MultiBandCompUI(this.multibandCompProcessor);
+        }
+        
+        // Spatial Design
         const spatialCanvas = document.getElementById('spatial-canvas');
-        
-        // Analyzerを初期化
-        if (analyzerCanvas && !this.analyzer) {
-            this.analyzer = new Analyzer(analyzerCanvas, this.audioPlayer);
-            this.analyzer.setupAnalyser();
-        }
-        
-        // MultiBand Compを初期化
-        if (!this.multibandComp) {
-            this.multibandComp = new MultiBandComp(this.audioContext, this.audioPlayer);
-        }
-        
-        // Spatial Designを初期化
-        if (spatialCanvas && !this.spatialDesign) {
-            this.spatialDesign = new SpatialDesign(spatialCanvas, this.audioPlayer);
+        if (spatialCanvas && !this.spatialDesignUI) {
+            this.spatialDesignProcessor = new SpatialDesignProcessor(this.audioContext);
+            this.spatialDesignUI = new SpatialDesignUI(spatialCanvas, this.spatialDesignProcessor);
         }
     }
 

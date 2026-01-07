@@ -266,8 +266,8 @@ class UIController {
             this.loopMaker.startPlaybackAnimation();
             
             // Analyzerを開始
-            if (this.loopMaker.analyzer) {
-                this.loopMaker.analyzer.start();
+            if (this.loopMaker.analyzerUI) {
+                this.loopMaker.analyzerUI.start();
             }
             
             this.showStatus('再生中...', 'info');
@@ -370,14 +370,19 @@ class UIController {
             input.disabled = false;
         });
         
+        // ピッチトランスポーズを有効化
+        if (this.loopMaker.pitchTransposeUI) {
+            this.loopMaker.pitchTransposeUI.enable();
+        }
+        
         // MultiBand Compを有効化
-        if (this.loopMaker.multibandComp) {
-            this.loopMaker.multibandComp.enable();
+        if (this.loopMaker.multibandCompUI) {
+            this.loopMaker.multibandCompUI.enable();
         }
         
         // Spatial Designを有効化
-        if (this.loopMaker.spatialDesign) {
-            this.loopMaker.spatialDesign.enable();
+        if (this.loopMaker.spatialDesignUI) {
+            this.loopMaker.spatialDesignUI.enable();
         }
     }
 

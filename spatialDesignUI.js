@@ -1,15 +1,15 @@
-// 空間デザイン - X-Z平面での再生位置指定と残響効果
-class SpatialDesign {
-    constructor(canvas, audioPlayer) {
+// 空間デザイン UI部分（キャンバス操作）
+class SpatialDesignUI {
+    constructor(canvas, audioProcessor) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.audioPlayer = audioPlayer;
+        this.audioProcessor = audioProcessor;
         
         // トラックの位置（X-Z平面）
         this.track1Position = { x: 0, z: 0 };
         this.track2Position = { x: 0, z: 0 };
         
-        // 残響パラメータ
+        // 残響Mix
         this.reverbMix = 0;
         
         this.dragging = false;
@@ -31,7 +31,7 @@ class SpatialDesign {
             reverbMixSlider.addEventListener('input', (e) => {
                 this.reverbMix = parseFloat(e.target.value);
                 document.getElementById('reverb-mix-value').textContent = Math.round(this.reverbMix) + '%';
-                this.updateReverb();
+                this.updateProcessor();
             });
         }
     }
@@ -47,10 +47,8 @@ class SpatialDesign {
         // 中心を原点とする座標系に変換
         const centerX = width / 2;
         const centerY = height / 2;
-        const posX = (canvasX - centerX) / centerX;
-        const posZ = (canvasY - centerY) / centerY;
         
-        // トラック1の位置（左側）
+        // トラック1の位置
         const track1X = this.track1Position.x * centerX + centerX;
         const track1Z = this.track1Position.z * centerY + centerY;
         const track1Radius = 15;
@@ -59,7 +57,7 @@ class SpatialDesign {
             return 1;
         }
         
-        // トラック2の位置（右側）
+        // トラック2の位置
         const track2X = this.track2Position.x * centerX + centerX;
         const track2Z = this.track2Position.z * centerY + centerY;
         const track2Radius = 15;
@@ -102,7 +100,7 @@ class SpatialDesign {
             }
             
             this.render();
-            this.updateSpatialPosition();
+            this.updateProcessor();
         }
     }
     
@@ -111,15 +109,13 @@ class SpatialDesign {
         this.dragTrack = null;
     }
     
-    updateSpatialPosition() {
-        if (this.audioPlayer) {
-            this.audioPlayer.updateSpatialPosition(this.track1Position, this.track2Position);
-        }
-    }
-    
-    updateReverb() {
-        if (this.audioPlayer) {
-            this.audioPlayer.updateReverb(this.reverbMix);
+    updateProcessor() {
+        if (this.audioProcessor) {
+            this.audioProcessor.updateSpatialPosition(
+                this.track1Position,
+                this.track2Position,
+                this.reverbMix
+            );
         }
     }
     
