@@ -8,7 +8,7 @@ class RegionController {
         this.regions = []; // リージョンの配列
         this.selectedRegion = null;
         this.dragging = false;
-        this.dragType = null; // 'move', 'resize-left', 'resize-right', 'resize-bottom', 'fade-in', 'fade-out', 'playback-start'
+        this.dragType = null; // 'move', 'resize-left', 'resize-right', 'resize-bottom', 'playback-start'
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.dragStartTime = 0;
@@ -45,10 +45,6 @@ class RegionController {
             sourceStartTime: sourceStartTime, // 元波形からの再生開始位置
             pitchShift: 0, // ピッチシフト（セミトーン）
             timeStretch: 1.0, // タイムストレッチ（1.0 = 通常）
-            fadeInStart: startTime,
-            fadeInEnd: startTime,
-            fadeOutStart: endTime,
-            fadeOutEnd: endTime,
             selected: false
         };
         this.regions.push(region);
@@ -119,16 +115,6 @@ class RegionController {
         const endX = region.endTime * timeScale;
         const regionY = 0;
         const regionHeight = height;
-        
-        // 左上のアンカー（フェードイン）
-        if (Math.abs(canvasX - startX) < anchorSize && Math.abs(canvasY - regionY) < anchorSize) {
-            return 'fade-in';
-        }
-        
-        // 右上のアンカー（フェードアウト）
-        if (Math.abs(canvasX - endX) < anchorSize && Math.abs(canvasY - regionY) < anchorSize) {
-            return 'fade-out';
-        }
         
         // 右下のアンカー（タイムストレッチ）
         if (Math.abs(canvasX - endX) < anchorSize && Math.abs(canvasY - (regionY + regionHeight)) < anchorSize) {
@@ -213,20 +199,6 @@ class RegionController {
                         this.dragRegion.endTime = newEnd;
                     }
                     break;
-                case 'fade-in':
-                    // フェードインの調整
-                    const fadeInTime = this.dragStartTime + deltaTime;
-                    if (fadeInTime >= this.dragRegion.startTime && fadeInTime <= this.dragRegion.endTime) {
-                        this.dragRegion.fadeInEnd = fadeInTime;
-                    }
-                    break;
-                case 'fade-out':
-                    // フェードアウトの調整
-                    const fadeOutTime = this.dragRegion.endTime - (this.dragStartTime + deltaTime - this.dragRegion.endTime);
-                    if (fadeOutTime >= this.dragRegion.startTime && fadeOutTime <= this.dragRegion.endTime) {
-                        this.dragRegion.fadeOutStart = fadeOutTime;
-                    }
-                    break;
             }
             
             this.render();
@@ -241,8 +213,6 @@ class RegionController {
                     this.canvas.style.cursor = 'move';
                 } else if (dragType === 'resize-left' || dragType === 'resize-right') {
                     this.canvas.style.cursor = 'ew-resize';
-                } else if (dragType === 'fade-in' || dragType === 'fade-out') {
-                    this.canvas.style.cursor = 'nwse-resize';
                 } else {
                     this.canvas.style.cursor = 'default';
                 }
@@ -290,18 +260,27 @@ class RegionController {
         const buffer = this.trackNumber === 1 ? this.loopMaker.track1Buffer : this.loopMaker.track2Buffer;
         if (!buffer) return;
         
-        const duration = buffer.duration;
+        // 表示範囲のdurationを使用（同期された表示範囲）
+        const duration = this.loopMaker.trackDisplayDuration || buffer.duration;
         const timeScale = width / duration;
+        
+        // 現在の再生位置を取得
+        const currentPlaybackTime = this.loopMaker.audioPlayer ? this.loopMaker.audioPlayer.getCurrentPlaybackTime() : null;
         
         // リージョンを描画
         this.regions.forEach(region => {
+            if (!region.sourceBuffer) return;
+            
             const startX = region.startTime * timeScale;
             const endX = region.endTime * timeScale;
             const regionWidth = endX - startX;
             
-            // リージョンの背景
-            ctx.fillStyle = region.selected ? 'rgba(102, 126, 234, 0.2)' : 'rgba(102, 126, 234, 0.1)';
+            // リージョンの背景（半透明）
+            ctx.fillStyle = region.selected ? 'rgba(102, 126, 234, 0.15)' : 'rgba(102, 126, 234, 0.05)';
             ctx.fillRect(startX, 0, regionWidth, height);
+            
+            // リージョン内に波形を描画
+            this.drawRegionWaveform(ctx, region, startX, endX, height, duration, timeScale);
             
             // リージョンの境界線
             ctx.strokeStyle = region.selected ? '#667eea' : '#999';
@@ -312,15 +291,137 @@ class RegionController {
             const anchorSize = 8;
             ctx.fillStyle = region.selected ? '#667eea' : '#666';
             
-            // 左上（フェードイン）
-            ctx.fillRect(startX - anchorSize/2, -anchorSize/2, anchorSize, anchorSize);
-            
-            // 右上（フェードアウト）
-            ctx.fillRect(endX - anchorSize/2, -anchorSize/2, anchorSize, anchorSize);
-            
             // 右下（タイムストレッチ）
             ctx.fillRect(endX - anchorSize/2, height - anchorSize/2, anchorSize, anchorSize);
+            
+            // 再生位置をオレンジ線で表示（リージョン内にある場合）
+            if (currentPlaybackTime !== null && currentPlaybackTime >= region.startTime && currentPlaybackTime <= region.endTime) {
+                const playbackX = currentPlaybackTime * timeScale;
+                ctx.strokeStyle = '#ff8c00'; // オレンジ色
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(playbackX, 0);
+                ctx.lineTo(playbackX, height);
+                ctx.stroke();
+            }
         });
+    }
+    
+    // リージョン内の波形を描画
+    drawRegionWaveform(ctx, region, startX, endX, height, displayDuration, timeScale) {
+        if (!region.sourceBuffer) return;
+        
+        const sourceBuffer = region.sourceBuffer;
+        const sourceStartTime = region.sourceStartTime;
+        const regionStartTime = region.startTime;
+        const regionEndTime = region.endTime;
+        const regionDuration = regionEndTime - regionStartTime;
+        
+        // リージョンの範囲内にクリッピング
+        const clipStartX = Math.max(0, startX);
+        const clipEndX = Math.min(ctx.canvas.width, endX);
+        const clipWidth = clipEndX - clipStartX;
+        
+        if (clipWidth <= 0) return;
+        
+        // リージョン内の波形を描画
+        const numChannels = sourceBuffer.numberOfChannels;
+        const trackHeight = numChannels === 2 ? height / 2 : height;
+        const sampleRate = sourceBuffer.sampleRate;
+        
+        // リージョン内の時間スケール（リージョンの幅に対する）
+        const regionTimeScale = clipWidth / regionDuration;
+        
+        // 波形の範囲をサンプルに変換
+        const sourceDuration = sourceBuffer.duration;
+        const availableDuration = Math.min(regionDuration, sourceDuration - sourceStartTime);
+        const waveformStartSample = Math.floor(sourceStartTime * sampleRate);
+        const waveformEndSample = Math.floor((sourceStartTime + availableDuration) * sampleRate);
+        const samplesPerPixel = Math.max(1, Math.floor((waveformEndSample - waveformStartSample) / clipWidth));
+        
+        for (let channel = 0; channel < numChannels; channel++) {
+            const channelData = sourceBuffer.getChannelData(channel);
+            const yOffset = channel * trackHeight;
+            const centerY = yOffset + trackHeight / 2;
+            
+            ctx.strokeStyle = channel === 0 ? '#667eea' : '#764ba2';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            
+            let firstPointTop = true;
+            let firstPointBottom = true;
+            
+            // 上側の波形
+            for (let x = clipStartX; x < clipEndX; x++) {
+                // リージョン内の相対位置（0からregionDuration）
+                const relativeX = x - startX;
+                const relativeTime = relativeX / timeScale;
+                
+                // 元波形内の時間
+                const sourceTime = sourceStartTime + relativeTime;
+                const pixelStartSample = Math.floor(sourceTime * sampleRate);
+                
+                if (pixelStartSample < waveformStartSample || pixelStartSample >= waveformEndSample) continue;
+                if (pixelStartSample < 0 || pixelStartSample >= channelData.length) continue;
+                
+                // 最大値と最小値を計算
+                let max = -Infinity;
+                let min = Infinity;
+                for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample && pixelStartSample + i < waveformEndSample; i++) {
+                    const value = channelData[pixelStartSample + i];
+                    if (value > max) max = value;
+                    if (value < min) min = value;
+                }
+                
+                if (max === -Infinity || min === Infinity) continue;
+                
+                const yTop = centerY - (max * trackHeight / 2 * 0.9);
+                const yBottom = centerY - (min * trackHeight / 2 * 0.9);
+                
+                if (firstPointTop) {
+                    ctx.moveTo(x, yTop);
+                    firstPointTop = false;
+                } else {
+                    ctx.lineTo(x, yTop);
+                }
+            }
+            
+            // 下側の波形（逆順に描画）
+            for (let x = clipEndX - 1; x >= clipStartX; x--) {
+                // リージョン内の相対位置（0からregionDuration）
+                const relativeX = x - startX;
+                const relativeTime = relativeX / timeScale;
+                
+                // 元波形内の時間
+                const sourceTime = sourceStartTime + relativeTime;
+                const pixelStartSample = Math.floor(sourceTime * sampleRate);
+                
+                if (pixelStartSample < waveformStartSample || pixelStartSample >= waveformEndSample) continue;
+                if (pixelStartSample < 0 || pixelStartSample >= channelData.length) continue;
+                
+                let max = -Infinity;
+                let min = Infinity;
+                for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample && pixelStartSample + i < waveformEndSample; i++) {
+                    const value = channelData[pixelStartSample + i];
+                    if (value > max) max = value;
+                    if (value < min) min = value;
+                }
+                
+                if (max === -Infinity || min === Infinity) continue;
+                
+                const yBottom = centerY - (min * trackHeight / 2 * 0.9);
+                
+                if (firstPointBottom) {
+                    ctx.lineTo(x, yBottom);
+                    firstPointBottom = false;
+                } else {
+                    ctx.lineTo(x, yBottom);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.stroke();
+        }
     }
     
     // すべてのリージョンを取得

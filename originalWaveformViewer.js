@@ -352,8 +352,11 @@ class OriginalWaveformViewer {
 
     drawTimeRuler(duration, width) {
         this.ruler.innerHTML = '';
-        const timeScale = width / duration;
-        const tickInterval = this.calculateTickInterval(duration, width);
+        
+        // タイムルーラー要素の実際の幅を取得
+        const rulerWidth = this.ruler.offsetWidth || width;
+        const timeScale = rulerWidth / duration;
+        const tickInterval = this.calculateTickInterval(duration, rulerWidth);
         
         for (let time = 0; time <= duration; time += tickInterval) {
             const x = time * timeScale;

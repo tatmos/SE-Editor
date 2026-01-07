@@ -358,9 +358,6 @@ class UIController {
         if (this.filenameInput) {
             this.filenameInput.disabled = false;
         }
-        if (this.loopMaker.overlapRateController) {
-            this.loopMaker.overlapRateController.enable();
-        }
         
         // ピッチコントロールを有効化
         const pitchInputs = document.querySelectorAll('.pitch-input');

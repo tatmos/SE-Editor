@@ -17,17 +17,6 @@ class LoopMaker {
         this.useRangeEnd1 = 0; // 元波形1の利用範囲の終了位置
         this.useRangeStart2 = 0; // 元波形2の利用範囲の開始位置
         this.useRangeEnd2 = 0; // 元波形2の利用範囲の終了位置
-        // フェードカーブ設定（デフォルトはログフェード）
-        this.fadeSettingsTrack1 = {
-            mode: 'log',
-            controlX: 0.25,
-            controlY: 0.1
-        };
-        this.fadeSettingsTrack2 = {
-            mode: 'log',
-            controlX: 0.25,
-            controlY: 0.9  // フェードアウトは反転（上側に配置）
-        };
         
         this.initializeElements();
         this.uiController = new UIController(this);
@@ -40,8 +29,6 @@ class LoopMaker {
         const originalRuler2 = document.getElementById('ruler-original-2');
         const canvas1 = document.getElementById('waveform-track1');
         const canvas2 = document.getElementById('waveform-track2');
-        const fadeCanvas1 = document.getElementById('fade-ui-track1');
-        const fadeCanvas2 = document.getElementById('fade-ui-track2');
         const ruler1 = document.getElementById('ruler-track1');
         const ruler2 = document.getElementById('ruler-track2');
         this.levelMeter1 = document.getElementById('level-meter-track1');
@@ -64,7 +51,6 @@ class LoopMaker {
         };
         
         this.waveformRenderer = new WaveformRenderer(canvas1, canvas2, ruler1, ruler2);
-        this.fadeUIController = new FadeUIController(this, fadeCanvas1, fadeCanvas2);
         
         // リージョンコントローラーを初期化
         this.regionController1 = new RegionController(this, canvas1, 1);
@@ -140,9 +126,7 @@ class LoopMaker {
             }
             
             this.track1Buffer = this.audioProcessor.track1Processor.createSaveBuffer(
-                processedBuffer, 
-                0, // overlapRateは削除されたため0に
-                this.fadeSettingsTrack1
+                processedBuffer
             );
             
             // baseDurationに合わせて調整（必要に応じて）
@@ -171,9 +155,7 @@ class LoopMaker {
             
             this.track2Buffer = this.audioProcessor.track2Processor.createSaveBuffer(
                 processedBuffer, 
-                0, // overlapRateは削除されたため0に
-                baseDuration,
-                this.fadeSettingsTrack2
+                baseDuration
             );
             
             // baseDurationに合わせて調整（必要に応じて）
@@ -283,9 +265,6 @@ class LoopMaker {
         const currentTime = this.audioPlayer ? this.audioPlayer.getCurrentPlaybackTime() : null;
         // トラック1とトラック2の表示範囲を同期（trackDisplayDurationを使用）
         this.waveformRenderer.render(this.track1Buffer, this.track2Buffer, currentTime, this.trackDisplayDuration);
-        if (this.fadeUIController) {
-            this.fadeUIController.render();
-        }
         // リージョンを描画
         if (this.regionController1) {
             this.regionController1.render();

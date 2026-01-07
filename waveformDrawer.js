@@ -11,10 +11,6 @@ class WaveformDrawer {
      * @param {number} width - キャンバスの幅
      * @param {number} height - キャンバスの高さ
      * @param {Object} options - オプション
-     * @param {number} options.fadeInStartTime - フェードイン開始秒（オプション）
-     * @param {number} options.fadeInEndTime - フェードイン終了秒（オプション）
-     * @param {number} options.fadeOutStartTime - フェードアウト開始秒（オプション）
-     * @param {number} options.fadeOutEndTime - フェードアウト終了秒（オプション）
      * @param {boolean} options.drawDCOffset - DCオフセットラインを描画するか（デフォルト: true）
      * @param {string} options.backgroundColor - 背景色（デフォルト: '#e0e0e0'）
      */
@@ -22,10 +18,6 @@ class WaveformDrawer {
         if (!audioBuffer) return;
 
         const {
-            fadeInStartTime = null,
-            fadeInEndTime = null,
-            fadeOutStartTime = null,
-            fadeOutEndTime = null,
             drawDCOffset = true,
             backgroundColor = '#e0e0e0'
         } = options;
@@ -117,18 +109,8 @@ class WaveformDrawer {
                         if (value < min) min = value;
                     }
 
-                    // フェードイン/フェードアウトを適用
-                    let fadeFactor = 1.0;
-                    if (fadeInStartTime !== null && fadeInEndTime !== null && timeInDisplay >= fadeInStartTime && timeInDisplay < fadeInEndTime) {
-                        const fadeProgress = (timeInDisplay - fadeInStartTime) / (fadeInEndTime - fadeInStartTime);
-                        fadeFactor = fadeProgress;
-                    } else if (fadeOutStartTime !== null && fadeOutEndTime !== null && timeInDisplay >= fadeOutStartTime && timeInDisplay < fadeOutEndTime) {
-                        const fadeProgress = (timeInDisplay - fadeOutStartTime) / (fadeOutEndTime - fadeOutStartTime);
-                        fadeFactor = 1.0 - fadeProgress;
-                    }
-
-                    const scaledMax = max * fadeFactor;
-                    const scaledMin = min * fadeFactor;
+                    const scaledMax = max;
+                    const scaledMin = min;
                     const yTop = centerY - (scaledMax * trackHeight / 2 * 0.9);
                     const yBottom = centerY - (scaledMin * trackHeight / 2 * 0.9);
 
@@ -156,17 +138,7 @@ class WaveformDrawer {
                         if (value < min) min = value;
                     }
 
-                    // フェードイン/フェードアウトを適用
-                    let fadeFactor = 1.0;
-                    if (fadeInStartTime !== null && fadeInEndTime !== null && timeInDisplay >= fadeInStartTime && timeInDisplay < fadeInEndTime) {
-                        const fadeProgress = (timeInDisplay - fadeInStartTime) / (fadeInEndTime - fadeInStartTime);
-                        fadeFactor = fadeProgress;
-                    } else if (fadeOutStartTime !== null && fadeOutEndTime !== null && timeInDisplay >= fadeOutStartTime && timeInDisplay < fadeOutEndTime) {
-                        const fadeProgress = (timeInDisplay - fadeOutStartTime) / (fadeOutEndTime - fadeOutStartTime);
-                        fadeFactor = 1.0 - fadeProgress;
-                    }
-
-                    const scaledMin = min * fadeFactor;
+                    const scaledMin = min;
                     const yBottom = centerY - (scaledMin * trackHeight / 2 * 0.9);
 
                     if (firstPointBottom) {

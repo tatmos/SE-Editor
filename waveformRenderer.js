@@ -82,9 +82,6 @@ class WaveformRenderer {
             width,
             height,
             {
-                // フェードインなし（既に加工済み）
-                fadeInStartTime: null,
-                fadeInEndTime: null,
                 drawDCOffset: true,
                 backgroundColor: '#e0e0e0'
             }
@@ -114,9 +111,6 @@ class WaveformRenderer {
             width,
             height,
             {
-                // フェードアウトなし（既に加工済み）
-                fadeOutStartTime: null,
-                fadeOutEndTime: null,
                 drawDCOffset: true,
                 backgroundColor: '#e0e0e0'
             }
@@ -136,6 +130,12 @@ class WaveformRenderer {
         ruler1.innerHTML = '';
         ruler2.innerHTML = '';
 
+        // タイムルーラー要素の実際の幅を取得
+        // タイムルーラーはキャンバスと同じ親要素（waveform-wrapper）の下にあるので、同じ幅になるべき
+        // ただし、実際の幅を取得して確実にする
+        const ruler1Width = ruler1.offsetWidth || width;
+        const ruler2Width = ruler2.offsetWidth || width;
+
         // 適切な目盛り間隔を計算（5秒、10秒、30秒など）
         let tickInterval = 1; // デフォルト1秒
         if (totalDuration > 60) {
@@ -146,19 +146,21 @@ class WaveformRenderer {
             tickInterval = 2;
         }
 
-        const timeScale = width / totalDuration;
+        const timeScale1 = ruler1Width / totalDuration;
+        const timeScale2 = ruler2Width / totalDuration;
         const numTicks = Math.floor(totalDuration / tickInterval) + 1;
 
         for (let i = 0; i < numTicks; i++) {
             const time = i * tickInterval;
             if (time > totalDuration) break;
 
-            const x = time * timeScale;
+            const x1 = time * timeScale1;
+            const x2 = time * timeScale2;
 
             // 目盛り線
             const tick1 = document.createElement('div');
             tick1.style.position = 'absolute';
-            tick1.style.left = x + 'px';
+            tick1.style.left = x1 + 'px';
             tick1.style.top = '0';
             tick1.style.width = '1px';
             tick1.style.height = '100%';
@@ -167,7 +169,7 @@ class WaveformRenderer {
 
             const tick2 = document.createElement('div');
             tick2.style.position = 'absolute';
-            tick2.style.left = x + 'px';
+            tick2.style.left = x2 + 'px';
             tick2.style.top = '0';
             tick2.style.width = '1px';
             tick2.style.height = '100%';
@@ -177,7 +179,7 @@ class WaveformRenderer {
             // 時間ラベル
             const label1 = document.createElement('div');
             label1.style.position = 'absolute';
-            label1.style.left = (x + 2) + 'px';
+            label1.style.left = (x1 + 2) + 'px';
             label1.style.top = '2px';
             label1.style.fontSize = '11px';
             label1.style.color = '#495057';
@@ -186,7 +188,7 @@ class WaveformRenderer {
 
             const label2 = document.createElement('div');
             label2.style.position = 'absolute';
-            label2.style.left = (x + 2) + 'px';
+            label2.style.left = (x2 + 2) + 'px';
             label2.style.top = '2px';
             label2.style.fontSize = '11px';
             label2.style.color = '#495057';
