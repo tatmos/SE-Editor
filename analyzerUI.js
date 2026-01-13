@@ -2,22 +2,37 @@
 class AnalyzerUI {
     constructor(canvas, audioProcessor) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        // willReadFrequently属性を設定してパフォーマンスを改善
+        this.ctx = canvas.getContext('2d', { willReadFrequently: true });
         this.audioProcessor = audioProcessor;
         this.animationFrameId = null;
         
         // ソノグラム用のバッファ（時間方向のデータを保持）
-        this.spectrogramBuffer = [];
-        this.maxHistoryLength = 512; // 保持する最大フレーム数
-        this.sampleInterval = 0; // サンプリング間隔（フレーム数）
-        this.sampleCounter = 0;
+        // 循環バッファを使用（shift()のコストを削減）
+        this.bufferSize = 512; // 保持する最大フレーム数
+        this.spectrogramBuffer = new Array(this.bufferSize);
+        this.bufferIndex = 0; // 循環バッファの現在位置
+        this.bufferCount = 0; // 実際に格納されているデータ数
+        
+        // パフォーマンス最適化用のキャッシュ
+        this.freqToYTable = null; // 周波数→Y座標変換テーブル
+        this.colorTable = null; // 強度→色変換テーブル
+        this.lastCanvasHeight = 0;
+        this.lastCanvasWidth = 0;
+        
+        // インクリメンタル描画用
+        this.lastDrawnCount = 0;
     }
     
     start() {
         if (this.animationFrameId) return;
         // バッファをクリア
-        this.spectrogramBuffer = [];
-        this.sampleCounter = 0;
+        this.spectrogramBuffer = new Array(this.bufferSize);
+        this.bufferIndex = 0;
+        this.bufferCount = 0;
+        this.lastDrawnCount = 0;
+        // キャッシュをクリア
+        this.freqToYTable = null;
         this.animate();
     }
     
@@ -32,8 +47,12 @@ class AnalyzerUI {
         this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, width, height);
         // バッファもクリア
-        this.spectrogramBuffer = [];
-        this.sampleCounter = 0;
+        this.spectrogramBuffer = new Array(this.bufferSize);
+        this.bufferIndex = 0;
+        this.bufferCount = 0;
+        this.lastDrawnCount = 0;
+        // キャッシュをクリア
+        this.freqToYTable = null;
     }
     
     animate() {
@@ -55,7 +74,7 @@ class AnalyzerUI {
         this.animationFrameId = requestAnimationFrame(() => this.animate());
     }
     
-    // 新しい周波数データをバッファに追加
+    // 新しい周波数データをバッファに追加（循環バッファを使用）
     addSpectrumColumn(dataArray) {
         // 新しい列をコピー
         const newColumn = new Uint8Array(dataArray.length);
@@ -63,75 +82,120 @@ class AnalyzerUI {
             newColumn[i] = dataArray[i];
         }
         
-        // 右端に追加
-        this.spectrogramBuffer.push(newColumn);
+        // 循環バッファに追加（shift()のコストを削減）
+        this.spectrogramBuffer[this.bufferIndex] = newColumn;
+        this.bufferIndex = (this.bufferIndex + 1) % this.bufferSize;
         
-        // 最大長を超えたら古いデータを削除
-        if (this.spectrogramBuffer.length > this.maxHistoryLength) {
-            this.spectrogramBuffer.shift();
+        if (this.bufferCount < this.bufferSize) {
+            this.bufferCount++;
         }
     }
     
-    // ソノグラムを描画
+    // ソノグラムを描画（最適化版：インクリメンタル描画）
     drawSpectrogram() {
         const width = this.canvas.width = this.canvas.offsetWidth;
         const height = this.canvas.height = this.canvas.offsetHeight;
         const ctx = this.ctx;
         
-        // 背景をクリア
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, width, height);
+        if (this.bufferCount === 0) {
+            // 背景をクリア
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
+            return;
+        }
         
-        if (this.spectrogramBuffer.length === 0) return;
+        // キャンバスサイズが変わった場合は全再描画
+        if (width !== this.lastCanvasWidth || height !== this.lastCanvasHeight) {
+            this.lastCanvasWidth = width;
+            this.lastCanvasHeight = height;
+            this.freqToYTable = null;
+            this.colorTable = null;
+            this.lastDrawnCount = 0;
+        }
         
-        const numFrequencies = this.spectrogramBuffer[0].length;
-        const numTimeFrames = Math.min(this.spectrogramBuffer.length, width);
-        
-        // 周波数軸を対数スケールで表示
-        // 低周波を下、高周波を上に表示
-        const minFreq = 0;
-        const maxFreq = numFrequencies - 1;
-        
-        // ピクセル単位で描画
-        const imageData = ctx.createImageData(width, height);
-        const data = imageData.data;
-        
-        // 各時間フレームを描画（右端が最新）
-        for (let t = 0; t < numTimeFrames; t++) {
-            const column = this.spectrogramBuffer[this.spectrogramBuffer.length - numTimeFrames + t];
-            if (!column) continue;
-            
-            // 時間位置（右端が最新）
-            const x = width - numTimeFrames + t;
-            if (x < 0 || x >= width) continue;
-            
-            // 各周波数ビンを描画（対数スケールでマッピング）
+        // 変換テーブルを事前計算（初回またはサイズ変更時のみ）
+        if (!this.freqToYTable || this.freqToYTable.length !== height) {
+            const numFrequencies = this.spectrogramBuffer[0] ? this.spectrogramBuffer[0].length : 1024;
+            this.freqToYTable = new Int32Array(height);
+            const minFreq = 0;
+            const maxFreq = numFrequencies - 1;
             for (let y = 0; y < height; y++) {
-                // 縦位置を周波数に変換（対数スケール）
                 const normalizedY = 1 - (y / height);
                 const freqIndex = this.logScaleToFreq(normalizedY, minFreq, maxFreq);
-                const f = Math.floor(freqIndex);
-                
-                if (f < 0 || f >= numFrequencies) continue;
-                
-                // 強度を取得
-                const intensity = column[f] / 255.0;
-                
-                // ヒートマップ風の色付け
-                const color = this.intensityToColor(intensity);
-                
-                // ピクセルを設定
-                const pixelIndex = (y * width + x) * 4;
-                if (pixelIndex >= 0 && pixelIndex < data.length - 3) {
-                    data[pixelIndex] = color.r;     // R
-                    data[pixelIndex + 1] = color.g; // G
-                    data[pixelIndex + 2] = color.b; // B
-                    data[pixelIndex + 3] = 255;     // A
-                }
+                this.freqToYTable[y] = Math.max(0, Math.min(numFrequencies - 1, Math.floor(freqIndex)));
             }
         }
         
-        ctx.putImageData(imageData, 0, 0);
+        // 色変換テーブルを事前計算（初回のみ）
+        if (!this.colorTable) {
+            this.colorTable = new Array(256);
+            for (let i = 0; i < 256; i++) {
+                this.colorTable[i] = this.intensityToColor(i / 255.0);
+            }
+        }
+        
+        // 新しい列の数を計算
+        const newColumns = Math.min(5, this.bufferCount - this.lastDrawnCount);
+        
+        if (newColumns > 0 && this.lastDrawnCount > 0) {
+            // インクリメンタル描画：既存の画像を左にシフト
+            const shiftWidth = width - newColumns;
+            if (shiftWidth > 0) {
+                const imageData = ctx.getImageData(newColumns, 0, shiftWidth, height);
+                ctx.putImageData(imageData, 0, 0);
+            }
+        } else if (this.lastDrawnCount === 0) {
+            // 初回は背景をクリア
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
+        }
+        
+        // 新しい列だけを右端に描画
+        const numFrequencies = this.spectrogramBuffer[0] ? this.spectrogramBuffer[0].length : 1024;
+        const numTimeFrames = Math.min(this.bufferCount, width);
+        const startX = Math.max(0, width - numTimeFrames);
+        const columnsToDraw = Math.min(newColumns > 0 ? newColumns : numTimeFrames, numTimeFrames);
+        
+        if (columnsToDraw > 0) {
+            const imageData = ctx.createImageData(columnsToDraw, height);
+            const data = imageData.data;
+            
+            for (let t = 0; t < columnsToDraw; t++) {
+                // 循環バッファからデータを取得
+                let bufferPos;
+                if (newColumns > 0) {
+                    // 新しい列を描画
+                    bufferPos = (this.bufferIndex - newColumns + t + this.bufferSize) % this.bufferSize;
+                } else {
+                    // 全再描画
+                    bufferPos = (this.bufferIndex - numTimeFrames + t + this.bufferSize) % this.bufferSize;
+                }
+                
+                const column = this.spectrogramBuffer[bufferPos];
+                if (!column) continue;
+                
+                for (let y = 0; y < height; y++) {
+                    const f = this.freqToYTable[y];
+                    if (f < 0 || f >= numFrequencies) continue;
+                    
+                    const intensity = column[f];
+                    const color = this.colorTable[intensity];
+                    
+                    const pixelIndex = (y * columnsToDraw + t) * 4;
+                    if (pixelIndex >= 0 && pixelIndex < data.length - 3) {
+                        data[pixelIndex] = color.r;
+                        data[pixelIndex + 1] = color.g;
+                        data[pixelIndex + 2] = color.b;
+                        data[pixelIndex + 3] = 255;
+                    }
+                }
+            }
+            
+            const drawX = newColumns > 0 ? width - newColumns : startX;
+            ctx.putImageData(imageData, drawX, 0);
+        }
+        
+        this.lastDrawnCount = this.bufferCount;
     }
     
     // 対数スケール（0-1）を周波数インデックスに変換

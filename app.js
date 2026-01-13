@@ -476,7 +476,30 @@ class LoopMaker {
         const analyzerCanvas = document.getElementById('analyzer-canvas');
         if (analyzerCanvas && !this.analyzerUI) {
             this.analyzerProcessor = new AnalyzerProcessor(this.audioContext);
-            this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
+            // WebGPUが利用可能な場合はWebGPU版を使用、そうでない場合は通常版
+            if (navigator.gpu) {
+                try {
+                    this.analyzerUI = new AnalyzerUIWebGPU(analyzerCanvas, this.analyzerProcessor);
+                    // 非同期初期化のため、少し待ってから確認
+                    // WebGPU初期化が失敗した場合のみCPU版にフォールバック
+                    setTimeout(() => {
+                        if (this.analyzerUI && !this.analyzerUI.isWebGPUReady && !this.analyzerUI.device) {
+                            console.log('Falling back to CPU-based analyzer (WebGPU initialization failed)');
+                            const oldUI = this.analyzerUI;
+                            this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
+                            // 古いUIをクリーンアップ
+                            if (oldUI && oldUI.stop) oldUI.stop();
+                        } else if (this.analyzerUI && this.analyzerUI.isWebGPUReady) {
+                            console.log('WebGPU analyzer is ready');
+                        }
+                    }, 500);
+                } catch (error) {
+                    console.warn('WebGPU analyzer failed, using CPU version:', error);
+                    this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
+                }
+            } else {
+                this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
+            }
         }
         
         // MultiBand Comp
