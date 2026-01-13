@@ -235,10 +235,62 @@ header h1 {
     align-items: center;
 }
 
+.track-header-buttons {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
 .track-label {
     font-weight: 600;
     color: #667eea;
     font-size: 14px;
+}
+
+.detail-btn {
+    background: transparent;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0;
+    color: #667eea;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.detail-btn:hover:not(:disabled) {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.detail-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.detail-btn.open {
+    transform: rotate(180deg);
+}
+
+.track-settings {
+    margin-bottom: 10px;
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+.track-settings.hidden {
+    display: none;
 }
 
 .clear-btn {
@@ -539,6 +591,40 @@ header h1 {
     flex-wrap: wrap;
 }
 
+.pitch-algorithm-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.pitch-algorithm-group label {
+    font-weight: 600;
+    color: #333;
+    min-width: 100px;
+}
+
+.pitch-algorithm-select {
+    padding: 8px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    min-width: 150px;
+}
+
+.pitch-algorithm-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.pitch-algorithm-select:disabled {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .pitch-control-group {
     display: flex;
     align-items: center;
@@ -548,7 +634,17 @@ header h1 {
 .pitch-control-group label {
     font-weight: 600;
     color: #333;
-    min-width: 120px;
+    min-width: 60px;
+}
+
+.track-settings .pitch-control-group {
+    margin: 0;
+}
+
+.pitch-value-control {
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
 .pitch-input {
@@ -558,6 +654,14 @@ header h1 {
     font-size: 14px;
     width: 80px;
     text-align: center;
+    /* スピナーを非表示 */
+    -moz-appearance: textfield;
+}
+
+.pitch-input::-webkit-outer-spin-button,
+.pitch-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 .pitch-input:focus {
@@ -568,6 +672,39 @@ header h1 {
 .pitch-input:disabled {
     background-color: #f5f5f5;
     cursor: not-allowed;
+}
+
+.pitch-btn {
+    padding: 8px 12px;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    background: white;
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 40px;
+}
+
+.pitch-btn:hover:not(:disabled) {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.pitch-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
+}
+
+.pitch-btn:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    border-color: #e0e0e0;
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 /* Analyzer */

@@ -75,6 +75,31 @@
                 <div class="track-content">
                     <div class="track-header">
                         <div class="track-label">トラック1</div>
+                        <button id="toggle-settings-track1" class="detail-btn" title="設定を開く/閉じる">▼</button>
+                    </div>
+                    <div class="track-settings hidden" id="track-settings-1">
+                        <div class="pitch-algorithm-group">
+                            <label for="pitch-algorithm-track1">アルゴリズム:</label>
+                            <select id="pitch-algorithm-track1" class="pitch-algorithm-select" disabled>
+                                <option value="resample">リサンプル</option>
+                                <option value="pitchshift">ピッチシフト</option>
+                            </select>
+                        </div>
+                        <div class="pitch-control-group">
+                            <label for="pitch-transpose-track1">移調:</label>
+                            <div class="pitch-value-control">
+                                <button id="pitch-transpose-track1-minus" class="pitch-btn" disabled>-1</button>
+                                <input type="number" id="pitch-transpose-track1" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
+                                <button id="pitch-transpose-track1-plus" class="pitch-btn" disabled>+1</button>
+                            </div>
+                            <span>セミトーン</span>
+                            <div class="pitch-value-control">
+                                <button id="pitch-cent-track1-minus" class="pitch-btn" disabled>-10</button>
+                                <input type="number" id="pitch-cent-track1" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
+                                <button id="pitch-cent-track1-plus" class="pitch-btn" disabled>+10</button>
+                            </div>
+                            <span>cent</span>
+                        </div>
                     </div>
                     <div class="waveform-wrapper">
                         <canvas id="waveform-track1" class="waveform-canvas"></canvas>
@@ -102,7 +127,34 @@
                 <div class="track-content">
                     <div class="track-header">
                         <div class="track-label">トラック2</div>
-                        <button id="remove-track-2-btn" class="clear-btn" title="トラック2を削除">✕</button>
+                        <div class="track-header-buttons">
+                            <button id="toggle-settings-track2" class="detail-btn" title="設定を開く/閉じる">▼</button>
+                            <button id="remove-track-2-btn" class="clear-btn" title="トラック2を削除">✕</button>
+                        </div>
+                    </div>
+                    <div class="track-settings hidden" id="track-settings-2">
+                        <div class="pitch-algorithm-group">
+                            <label for="pitch-algorithm-track2">アルゴリズム:</label>
+                            <select id="pitch-algorithm-track2" class="pitch-algorithm-select" disabled>
+                                <option value="resample">リサンプル</option>
+                                <option value="pitchshift">ピッチシフト</option>
+                            </select>
+                        </div>
+                        <div class="pitch-control-group">
+                            <label for="pitch-transpose-track2">移調:</label>
+                            <div class="pitch-value-control">
+                                <button id="pitch-transpose-track2-minus" class="pitch-btn" disabled>-1</button>
+                                <input type="number" id="pitch-transpose-track2" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
+                                <button id="pitch-transpose-track2-plus" class="pitch-btn" disabled>+1</button>
+                            </div>
+                            <span>セミトーン</span>
+                            <div class="pitch-value-control">
+                                <button id="pitch-cent-track2-minus" class="pitch-btn" disabled>-10</button>
+                                <input type="number" id="pitch-cent-track2" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
+                                <button id="pitch-cent-track2-plus" class="pitch-btn" disabled>+10</button>
+                            </div>
+                            <span>cent</span>
+                        </div>
                     </div>
                     <div class="waveform-wrapper">
                         <canvas id="waveform-track2" class="waveform-canvas"></canvas>
@@ -112,23 +164,6 @@
             </div>
         </div>
 
-        <!-- ピッチトランスポーズコントロール -->
-        <div class="pitch-controls">
-            <div class="pitch-control-group">
-                <label for="pitch-transpose-track1">トラック1 移調:</label>
-                <input type="number" id="pitch-transpose-track1" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
-                <span>セミトーン</span>
-                <input type="number" id="pitch-cent-track1" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
-                <span>cent</span>
-            </div>
-            <div class="pitch-control-group hidden" id="pitch-control-group-track2">
-                <label for="pitch-transpose-track2">トラック2 移調:</label>
-                <input type="number" id="pitch-transpose-track2" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
-                <span>セミトーン</span>
-                <input type="number" id="pitch-cent-track2" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
-                <span>cent</span>
-            </div>
-        </div>
 
         <!-- Analyzer -->
         <div class="analyzer-container">

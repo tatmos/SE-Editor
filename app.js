@@ -306,6 +306,18 @@ class LoopMaker {
             return trackNumber === 1 ? this.track1Buffer : this.track2Buffer;
         }
 
+        // 元波形から選択範囲を抽出
+        let useRangeBuffer = this.audioProcessor.extractRange(
+            sourceBuffer,
+            rangeStart,
+            rangeEnd
+        );
+
+        // ピッチシフトを適用
+        if (this.pitchTransposeProcessor && useRangeBuffer) {
+            useRangeBuffer = this.pitchTransposeProcessor.applyPitchShift(useRangeBuffer, trackNumber);
+        }
+
         const sampleRate = this.audioContext.sampleRate;
         // 2chステレオを前提（mixBuffers側でステレオに統一しているため）
         const numChannels = 2;
@@ -321,26 +333,26 @@ class LoopMaker {
             const regionDuration = Math.max(0, regionEndTime - regionStartTime);
             if (regionDuration <= 0) return;
 
-            // 実際にコピーする長さは「リージョン長」と「選択範囲長」の短い方
-            const availableDuration = Math.min(regionDuration, selectionDuration);
+            // 実際にコピーする長さは「リージョン長」と「選択範囲長（ピッチシフト後）」の短い方
+            const processedDuration = useRangeBuffer ? useRangeBuffer.duration : selectionDuration;
+            const availableDuration = Math.min(regionDuration, processedDuration);
             if (availableDuration <= 0) return;
 
-            const srcSampleRate = sourceBuffer.sampleRate;
+            const srcSampleRate = useRangeBuffer.sampleRate;
             const regionStartSample = Math.floor(regionStartTime * sampleRate);
             const regionLength = Math.floor(availableDuration * sampleRate);
 
             for (let ch = 0; ch < numChannels; ch++) {
                 const dstData = previewBuffer.getChannelData(ch);
-                const srcCh = Math.min(ch, sourceBuffer.numberOfChannels - 1);
-                const srcData = sourceBuffer.getChannelData(srcCh);
+                const srcCh = Math.min(ch, useRangeBuffer.numberOfChannels - 1);
+                const srcData = useRangeBuffer.getChannelData(srcCh);
 
                 for (let i = 0; i < regionLength; i++) {
                     const dstIndex = regionStartSample + i;
                     if (dstIndex < 0 || dstIndex >= length) break;
 
-                    // 元波形側のサンプル位置（時間ベースで変換）
-                    const t = rangeStart + (i / sampleRate);
-                    const srcIndex = Math.floor(t * srcSampleRate);
+                    // ピッチシフト後のバッファから直接コピー
+                    const srcIndex = i;
                     if (srcIndex < 0 || srcIndex >= srcData.length) continue;
 
                     // 複数リージョンが重なる場合は加算（クリッピングはmix時に行う）
@@ -457,7 +469,7 @@ class LoopMaker {
         // ピッチトランスポーズ
         if (!this.pitchTransposeUI) {
             this.pitchTransposeProcessor = new PitchTransposeProcessor(this.audioContext);
-            this.pitchTransposeUI = new PitchTransposeUI(this.pitchTransposeProcessor);
+            this.pitchTransposeUI = new PitchTransposeUI(this.pitchTransposeProcessor, this);
         }
         
         // Analyzer

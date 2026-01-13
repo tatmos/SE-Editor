@@ -36,7 +36,10 @@ class UIController {
         this.removeTrack2Btn = document.getElementById('remove-track-2-btn');
         this.trackContainer2 = document.getElementById('track-container-2');
         this.addTrackContainer = document.querySelector('.add-track-container');
-        this.pitchControlGroupTrack2 = document.getElementById('pitch-control-group-track2');
+        this.toggleSettingsTrack1Btn = document.getElementById('toggle-settings-track1');
+        this.toggleSettingsTrack2Btn = document.getElementById('toggle-settings-track2');
+        this.trackSettings1 = document.getElementById('track-settings-1');
+        this.trackSettings2 = document.getElementById('track-settings-2');
         
         // ミュート状態
         this.track1Muted = false;
@@ -59,12 +62,16 @@ class UIController {
 
     setupEventListeners() {
         this.fileInput1.addEventListener('change', (e) => this.handleFileUpload(e, 1));
-        this.fileInput2.addEventListener('change', (e) => this.handleFileUpload(e, 2));
+        if (this.fileInput2) {
+            this.fileInput2.addEventListener('change', (e) => this.handleFileUpload(e, 2));
+        }
         this.saveBtn.addEventListener('click', () => this.saveFile());
         this.playBtn.addEventListener('click', () => this.playPreview());
         this.stopBtn.addEventListener('click', () => this.stopPreview());
         this.muteTrack1Btn.addEventListener('click', () => this.toggleMuteTrack1());
-        this.muteTrack2Btn.addEventListener('click', () => this.toggleMuteTrack2());
+        if (this.muteTrack2Btn) {
+            this.muteTrack2Btn.addEventListener('click', () => this.toggleMuteTrack2());
+        }
         if (this.clearOriginal1Btn) {
             this.clearOriginal1Btn.addEventListener('click', () => this.clearOriginalWaveform(1));
         }
@@ -79,6 +86,12 @@ class UIController {
         }
         if (this.removeTrack2Btn) {
             this.removeTrack2Btn.addEventListener('click', () => this.removeTrack2());
+        }
+        if (this.toggleSettingsTrack1Btn) {
+            this.toggleSettingsTrack1Btn.addEventListener('click', () => this.toggleTrackSettings(1));
+        }
+        if (this.toggleSettingsTrack2Btn) {
+            this.toggleSettingsTrack2Btn.addEventListener('click', () => this.toggleTrackSettings(2));
         }
 
         // ドロップゾーン1（元波形1）
@@ -461,11 +474,28 @@ class UIController {
         if (this.addTrackContainer) {
             this.addTrackContainer.classList.add('hidden');
         }
-        // トラック2のピッチコントロールを表示
-        if (this.pitchControlGroupTrack2) {
-            this.pitchControlGroupTrack2.classList.remove('hidden');
-        }
         this.showStatus('トラック2を追加しました', 'info');
+    }
+
+    toggleTrackSettings(trackNumber) {
+        const settings = trackNumber === 1 ? this.trackSettings1 : this.trackSettings2;
+        const button = trackNumber === 1 ? this.toggleSettingsTrack1Btn : this.toggleSettingsTrack2Btn;
+        
+        if (!settings || !button) return;
+        
+        const isHidden = settings.classList.contains('hidden');
+        
+        if (isHidden) {
+            // 開く
+            settings.classList.remove('hidden');
+            button.textContent = '▲';
+            button.classList.add('open');
+        } else {
+            // 閉じる
+            settings.classList.add('hidden');
+            button.textContent = '▼';
+            button.classList.remove('open');
+        }
     }
 
     removeTrack2() {
@@ -489,10 +519,6 @@ class UIController {
         // 「トラック2を追加」ボタンを再表示
         if (this.addTrackContainer) {
             this.addTrackContainer.classList.remove('hidden');
-        }
-        // トラック2のピッチコントロールを非表示
-        if (this.pitchControlGroupTrack2) {
-            this.pitchControlGroupTrack2.classList.add('hidden');
         }
 
         // バッファを更新（トラック2がない状態で）
