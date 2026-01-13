@@ -329,8 +329,19 @@ class UIController {
                 offsetSeconds = Math.min(...starts);
             }
 
+            // AnalyzerProcessorをセットアップ（Mix後のAnalyserを取得）
+            let mixGainNode = null;
+            if (this.loopMaker.analyzerProcessor) {
+                // AnalyzerProcessorを初期化（まだ接続しない）
+                this.loopMaker.analyzerProcessor.setup(null);
+                // Mix用のGainノードを作成（audioPlayer内で接続される）
+                mixGainNode = this.loopMaker.audioContext.createGain();
+                // MixノードをAnalyzerに接続
+                this.loopMaker.analyzerProcessor.connectMixNode(mixGainNode);
+            }
+            
             // トラック1と2の加工後のバッファを再生（offsetSeconds から）
-            this.loopMaker.audioPlayer.playPreviewWithBuffers(previewTrack1, previewTrack2, offsetSeconds);
+            this.loopMaker.audioPlayer.playPreviewWithBuffers(previewTrack1, previewTrack2, offsetSeconds, mixGainNode);
             
             // 再生開始直後に、現在のミュート状態を反映
             // （再生前にミュートしていた場合でも、再生開始時に反映されるようにする）

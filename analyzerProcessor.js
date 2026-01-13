@@ -20,6 +20,13 @@ class AnalyzerProcessor {
         this.dataArray = new Uint8Array(bufferLength);
     }
     
+    // 後からMixノードを接続する場合
+    connectMixNode(mixNode) {
+        if (this.mixAnalyser && mixNode) {
+            mixNode.connect(this.mixAnalyser);
+        }
+    }
+    
     getFrequencyData() {
         if (!this.mixAnalyser || !this.dataArray) return null;
         

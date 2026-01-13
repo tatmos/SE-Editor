@@ -16,7 +16,8 @@ class AudioPlayer {
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
     // offsetSeconds: 再生開始位置（秒）
-    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0) {
+    // mixGainNode: Mix用のGainノード（既にAnalyzerに接続されている）
+    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0, mixGainNode = null) {
         if (!track1Buffer || !track2Buffer || this.isPlaying) return false;
 
         try {
@@ -28,6 +29,9 @@ class AudioPlayer {
             if (offset < 0) {
                 offset += loopDuration;
             }
+            
+            // Mix用のGainノード（提供されていない場合は新規作成）
+            const mixNode = mixGainNode || this.audioContext.createGain();
             
             // トラック1: 加工後のバッファをループ再生（トラック1の加工後の範囲でループ）
             const source1 = this.audioContext.createBufferSource();
@@ -43,6 +47,7 @@ class AudioPlayer {
             
             source1.connect(this.gainNode1);
             this.gainNode1.connect(this.analyser1);
+            this.gainNode1.connect(mixNode); // Mixノードにも接続
             this.analyser1.connect(this.audioContext.destination);
             
             // トラック2: 加工後のバッファをループ再生（トラック1と同じ範囲でループ）
@@ -59,9 +64,13 @@ class AudioPlayer {
             
             source2.connect(this.gainNode2);
             this.gainNode2.connect(this.analyser2);
+            this.gainNode2.connect(mixNode); // Mixノードにも接続
             this.analyser2.connect(this.audioContext.destination);
+            
+            // Mixノードをdestinationに接続
+            mixNode.connect(this.audioContext.destination);
 
-            this.sourceNodes = [source1, source2, this.gainNode1, this.gainNode2, this.analyser1, this.analyser2];
+            this.sourceNodes = [source1, source2, this.gainNode1, this.gainNode2, this.analyser1, this.analyser2, mixNode];
             this.loopDuration = loopDuration;
 
             // 2トラックを同時に再生（オフセット位置から）
