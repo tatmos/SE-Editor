@@ -145,6 +145,19 @@ header h1 {
     padding: 15px;
 }
 
+.original-waveform-container.hidden {
+    display: none;
+}
+
+.add-waveform-container {
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.add-waveform-container.hidden {
+    display: none;
+}
+
 .original-waveform-container .waveform-wrapper {
     position: relative;
     background: white;
@@ -187,6 +200,19 @@ header h1 {
     padding: 5px;
     display: flex;
     gap: 5px;
+}
+
+.track-container.hidden {
+    display: none;
+}
+
+.add-track-container {
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.add-track-container.hidden {
+    display: none;
 }
 
 .track-sidebar {

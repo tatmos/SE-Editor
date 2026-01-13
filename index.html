@@ -21,11 +21,6 @@
                     <input type="file" id="file-input-1" accept=".wav,.mp3,audio/*" hidden>
                     元波形1をアップロード
                 </label>
-                <label for="file-input-2" class="btn btn-primary">
-                    <!-- iOS系ブラウザでwav/mp3がグレーアウトしないように拡張子も明示 -->
-                    <input type="file" id="file-input-2" accept=".wav,.mp3,audio/*" hidden>
-                    元波形2をアップロード
-                </label>
                 <button id="save-btn" class="btn btn-secondary" disabled>ファイル保存</button>
                 <input type="text" id="filename-input" class="filename-input" placeholder="se_editor_output.wav" value="se_editor_output.wav" disabled>
             </div>
@@ -49,7 +44,11 @@
                 <div id="ruler-original-1" class="time-ruler"></div>
             </div>
             
-            <div class="original-waveform-container">
+            <div class="add-waveform-container">
+                <button id="add-waveform-2-btn" class="btn btn-secondary">+ 元波形2を追加</button>
+            </div>
+            
+            <div class="original-waveform-container hidden" id="original-waveform-container-2">
                 <div class="track-header">
                     <div class="track-label">元波形2（利用範囲指定）</div>
                     <button id="clear-original-2" class="clear-btn" title="元波形2をクリア">✕</button>
@@ -84,7 +83,11 @@
                 </div>
             </div>
 
-            <div class="track-container">
+            <div class="add-track-container">
+                <button id="add-track-2-btn" class="btn btn-secondary">+ トラック2を追加</button>
+            </div>
+
+            <div class="track-container hidden" id="track-container-2">
                 <div class="track-sidebar">
                     <div id="level-meter-track2" class="level-meter">
                         <div class="level-bar"></div>
@@ -99,6 +102,7 @@
                 <div class="track-content">
                     <div class="track-header">
                         <div class="track-label">トラック2</div>
+                        <button id="remove-track-2-btn" class="clear-btn" title="トラック2を削除">✕</button>
                     </div>
                     <div class="waveform-wrapper">
                         <canvas id="waveform-track2" class="waveform-canvas"></canvas>
@@ -117,7 +121,7 @@
                 <input type="number" id="pitch-cent-track1" class="pitch-input" value="0" min="-50" max="50" step="1" disabled>
                 <span>cent</span>
             </div>
-            <div class="pitch-control-group">
+            <div class="pitch-control-group hidden" id="pitch-control-group-track2">
                 <label for="pitch-transpose-track2">トラック2 移調:</label>
                 <input type="number" id="pitch-transpose-track2" class="pitch-input" value="0" min="-24" max="24" step="1" disabled>
                 <span>セミトーン</span>

@@ -29,6 +29,14 @@ class UIController {
         this.overwriteCancelBtn = document.getElementById('overwrite-cancel');
         this.clearOriginal1Btn = document.getElementById('clear-original-1');
         this.clearOriginal2Btn = document.getElementById('clear-original-2');
+        this.addWaveform2Btn = document.getElementById('add-waveform-2-btn');
+        this.originalWaveformContainer2 = document.getElementById('original-waveform-container-2');
+        this.addWaveformContainer = document.querySelector('.add-waveform-container');
+        this.addTrack2Btn = document.getElementById('add-track-2-btn');
+        this.removeTrack2Btn = document.getElementById('remove-track-2-btn');
+        this.trackContainer2 = document.getElementById('track-container-2');
+        this.addTrackContainer = document.querySelector('.add-track-container');
+        this.pitchControlGroupTrack2 = document.getElementById('pitch-control-group-track2');
         
         // ミュート状態
         this.track1Muted = false;
@@ -62,6 +70,15 @@ class UIController {
         }
         if (this.clearOriginal2Btn) {
             this.clearOriginal2Btn.addEventListener('click', () => this.clearOriginalWaveform(2));
+        }
+        if (this.addWaveform2Btn) {
+            this.addWaveform2Btn.addEventListener('click', () => this.addWaveform2());
+        }
+        if (this.addTrack2Btn) {
+            this.addTrack2Btn.addEventListener('click', () => this.addTrack2());
+        }
+        if (this.removeTrack2Btn) {
+            this.removeTrack2Btn.addEventListener('click', () => this.removeTrack2());
         }
 
         // ドロップゾーン1（元波形1）
@@ -396,6 +413,15 @@ class UIController {
             if (this.fileInput2) {
                 this.fileInput2.value = '';
             }
+            
+            // 元波形2のセクションを非表示に戻す
+            if (this.originalWaveformContainer2) {
+                this.originalWaveformContainer2.classList.add('hidden');
+            }
+            // 「元波形2を追加」ボタンを再表示
+            if (this.addWaveformContainer) {
+                this.addWaveformContainer.classList.remove('hidden');
+            }
         }
         
         // バッファを更新
@@ -409,6 +435,73 @@ class UIController {
         this.enableControls();
         
         this.showStatus(`元波形${trackNumber}をクリアしました`, 'info');
+    }
+
+    addWaveform2() {
+        // 元波形2のセクションを表示
+        if (this.originalWaveformContainer2) {
+            this.originalWaveformContainer2.classList.remove('hidden');
+        }
+        // 「元波形2を追加」ボタンを非表示
+        if (this.addWaveformContainer) {
+            this.addWaveformContainer.classList.add('hidden');
+        }
+        // ファイル入力2をクリックしてファイル選択を促す
+        if (this.fileInput2) {
+            this.fileInput2.click();
+        }
+    }
+
+    addTrack2() {
+        // トラック2のセクションを表示
+        if (this.trackContainer2) {
+            this.trackContainer2.classList.remove('hidden');
+        }
+        // 「トラック2を追加」ボタンを非表示
+        if (this.addTrackContainer) {
+            this.addTrackContainer.classList.add('hidden');
+        }
+        // トラック2のピッチコントロールを表示
+        if (this.pitchControlGroupTrack2) {
+            this.pitchControlGroupTrack2.classList.remove('hidden');
+        }
+        this.showStatus('トラック2を追加しました', 'info');
+    }
+
+    removeTrack2() {
+        // 再生中なら停止
+        if (this.loopMaker.audioPlayer && this.loopMaker.audioPlayer.isPlaying) {
+            this.loopMaker.audioPlayer.stopPreview();
+            this.loopMaker.stopPlaybackAnimation();
+            this.playBtn.disabled = false;
+            this.stopBtn.disabled = true;
+        }
+
+        // トラック2のリージョンをクリア
+        if (this.loopMaker.regionController2) {
+            this.loopMaker.regionController2.clearRegions();
+        }
+
+        // トラック2のセクションを非表示
+        if (this.trackContainer2) {
+            this.trackContainer2.classList.add('hidden');
+        }
+        // 「トラック2を追加」ボタンを再表示
+        if (this.addTrackContainer) {
+            this.addTrackContainer.classList.remove('hidden');
+        }
+        // トラック2のピッチコントロールを非表示
+        if (this.pitchControlGroupTrack2) {
+            this.pitchControlGroupTrack2.classList.add('hidden');
+        }
+
+        // バッファを更新（トラック2がない状態で）
+        this.loopMaker.updateBuffers();
+        
+        // 波形を再描画
+        this.loopMaker.drawWaveforms();
+        
+        this.showStatus('トラック2を削除しました', 'info');
     }
 
     updateClearButtonsState() {
