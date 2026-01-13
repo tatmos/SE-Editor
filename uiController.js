@@ -27,6 +27,8 @@ class UIController {
         this.overwriteConfirmBtn = document.getElementById('overwrite-confirm');
         this.overwriteRenameBtn = document.getElementById('overwrite-rename');
         this.overwriteCancelBtn = document.getElementById('overwrite-cancel');
+        this.clearOriginal1Btn = document.getElementById('clear-original-1');
+        this.clearOriginal2Btn = document.getElementById('clear-original-2');
         
         // ミュート状態
         this.track1Muted = false;
@@ -42,6 +44,9 @@ class UIController {
         if (this.overwriteCancelBtn) {
             this.overwriteCancelBtn.addEventListener('click', () => this.handleOverwriteCancel());
         }
+        
+        // 初期状態でクリアボタンの有効/無効を設定
+        this.updateClearButtonsState();
     }
 
     setupEventListeners() {
@@ -52,6 +57,12 @@ class UIController {
         this.stopBtn.addEventListener('click', () => this.stopPreview());
         this.muteTrack1Btn.addEventListener('click', () => this.toggleMuteTrack1());
         this.muteTrack2Btn.addEventListener('click', () => this.toggleMuteTrack2());
+        if (this.clearOriginal1Btn) {
+            this.clearOriginal1Btn.addEventListener('click', () => this.clearOriginalWaveform(1));
+        }
+        if (this.clearOriginal2Btn) {
+            this.clearOriginal2Btn.addEventListener('click', () => this.clearOriginalWaveform(2));
+        }
 
         // ドロップゾーン1（元波形1）
         if (this.dropZone1) {
@@ -234,6 +245,7 @@ class UIController {
             }
             
             this.loopMaker.drawWaveforms();
+            this.updateClearButtonsState();
             this.enableControls();
             this.showStatus(`元波形${trackNumber}の読み込みが完了しました`, 'success');
         } catch (error) {
@@ -259,8 +271,46 @@ class UIController {
             this.playBtn.disabled = true;
             this.stopBtn.disabled = false;
 
-            // トラック1と2の加工後のバッファを再生
-            this.loopMaker.audioPlayer.playPreviewWithBuffers(this.loopMaker.track1Buffer, this.loopMaker.track2Buffer);
+            // リージョン情報からプレビュー用バッファを生成
+            const previewTrack1 = this.loopMaker.buildPreviewBufferFromRegions
+                ? this.loopMaker.buildPreviewBufferFromRegions(1)
+                : this.loopMaker.track1Buffer;
+            const previewTrack2 = this.loopMaker.buildPreviewBufferFromRegions
+                ? this.loopMaker.buildPreviewBufferFromRegions(2)
+                : this.loopMaker.track2Buffer;
+
+            if (!previewTrack1 || !previewTrack2) {
+                this.showStatus('プレビュー用バッファの生成に失敗しました', 'error');
+                this.playBtn.disabled = false;
+                this.stopBtn.disabled = true;
+                return;
+            }
+
+            // 再生開始位置を決定（選択中のリージョンの開始位置から再生）
+            let offsetSeconds = 0;
+            const starts = [];
+            if (this.loopMaker.regionController1 && this.loopMaker.regionController1.getSelectedRegion()) {
+                starts.push(this.loopMaker.regionController1.getSelectedRegion().startTime);
+            }
+            if (this.loopMaker.regionController2 && this.loopMaker.regionController2.getSelectedRegion()) {
+                starts.push(this.loopMaker.regionController2.getSelectedRegion().startTime);
+            }
+            if (starts.length > 0) {
+                offsetSeconds = Math.min(...starts);
+            }
+
+            // トラック1と2の加工後のバッファを再生（offsetSeconds から）
+            this.loopMaker.audioPlayer.playPreviewWithBuffers(previewTrack1, previewTrack2, offsetSeconds);
+            
+            // 再生開始直後に、現在のミュート状態を反映
+            // （再生前にミュートしていた場合でも、再生開始時に反映されるようにする）
+            if (this.track1Muted) {
+                this.loopMaker.audioPlayer.setTrack1Mute(true);
+            }
+            if (this.track2Muted) {
+                this.loopMaker.audioPlayer.setTrack2Mute(true);
+            }
+
             this.loopMaker.startPlaybackAnimation();
             
             // Analyzerを開始
@@ -285,6 +335,91 @@ class UIController {
         this.playBtn.disabled = false;
         this.stopBtn.disabled = true;
         this.showStatus('停止しました', 'info');
+    }
+
+    clearOriginalWaveform(trackNumber) {
+        // 再生中なら停止
+        if (this.loopMaker.audioPlayer && this.loopMaker.audioPlayer.isPlaying) {
+            this.loopMaker.audioPlayer.stopPreview();
+            this.loopMaker.stopPlaybackAnimation();
+            this.playBtn.disabled = false;
+            this.stopBtn.disabled = true;
+        }
+
+        if (trackNumber === 1) {
+            // 元波形1をクリア
+            this.loopMaker.originalBuffer1 = null;
+            this.loopMaker.useRangeStart1 = 0;
+            this.loopMaker.useRangeEnd1 = 0;
+            
+            // 元波形ビューアをクリア
+            if (this.loopMaker.originalWaveformViewer1) {
+                this.loopMaker.originalWaveformViewer1.setAudioBuffer(null);
+            }
+            
+            // ドロップオーバーレイを表示
+            if (this.dropOverlay1) {
+                this.dropOverlay1.classList.remove('hidden');
+            }
+            
+            // トラック1のリージョンをクリア
+            if (this.loopMaker.regionController1) {
+                this.loopMaker.regionController1.clearRegions();
+            }
+            
+            // ファイル入力もリセット
+            if (this.fileInput1) {
+                this.fileInput1.value = '';
+            }
+        } else if (trackNumber === 2) {
+            // 元波形2をクリア
+            this.loopMaker.originalBuffer2 = null;
+            this.loopMaker.useRangeStart2 = 0;
+            this.loopMaker.useRangeEnd2 = 0;
+            
+            // 元波形ビューアをクリア
+            if (this.loopMaker.originalWaveformViewer2) {
+                this.loopMaker.originalWaveformViewer2.setAudioBuffer(null);
+            }
+            
+            // ドロップオーバーレイを表示
+            if (this.dropOverlay2) {
+                this.dropOverlay2.classList.remove('hidden');
+            }
+            
+            // トラック2のリージョンをクリア
+            if (this.loopMaker.regionController2) {
+                this.loopMaker.regionController2.clearRegions();
+            }
+            
+            // ファイル入力もリセット
+            if (this.fileInput2) {
+                this.fileInput2.value = '';
+            }
+        }
+        
+        // バッファを更新
+        this.loopMaker.updateBuffers();
+        
+        // 波形を再描画
+        this.loopMaker.drawWaveforms();
+        
+        // コントロールの有効/無効を更新
+        this.updateClearButtonsState();
+        this.enableControls();
+        
+        this.showStatus(`元波形${trackNumber}をクリアしました`, 'info');
+    }
+
+    updateClearButtonsState() {
+        // 元波形1の✕ボタンの有効/無効を更新
+        if (this.clearOriginal1Btn) {
+            this.clearOriginal1Btn.disabled = !this.loopMaker.originalBuffer1;
+        }
+        // 元波形2の✕ボタンの有効/無効を更新
+        if (this.clearOriginal2Btn) {
+            this.clearOriginal2Btn.disabled = !this.loopMaker.originalBuffer2;
+        }
     }
 
     async saveFile() {
@@ -379,6 +514,9 @@ class UIController {
         if (this.loopMaker.spatialDesignUI) {
             this.loopMaker.spatialDesignUI.enable();
         }
+        
+        // クリアボタンの状態を更新
+        this.updateClearButtonsState();
     }
 
     showStatus(message, type = 'info') {

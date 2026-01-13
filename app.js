@@ -181,11 +181,40 @@ class LoopMaker {
         if (wasPlaying && this.audioPlayer && this.track1Buffer && this.track2Buffer) {
             const newDuration = this.track1Buffer.duration;
             if (newDuration > 0) {
+                // 現在のミュート状態を保存
+                const track1Muted = this.uiController && this.uiController.track1Muted ? this.uiController.track1Muted : false;
+                const track2Muted = this.uiController && this.uiController.track2Muted ? this.uiController.track2Muted : false;
+                
                 // 新しいバッファの長さに合わせて再生位置をクリップ
                 let seekTime = currentPlaybackTime !== null ? currentPlaybackTime : 0;
                 seekTime = Math.max(0, Math.min(newDuration, seekTime));
                 this.audioPlayer.stopPreview();
-                this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, seekTime);
+                
+                // プレビュー用バッファを生成（リージョン情報から）
+                const previewTrack1 = this.buildPreviewBufferFromRegions ? this.buildPreviewBufferFromRegions(1) : this.track1Buffer;
+                const previewTrack2 = this.buildPreviewBufferFromRegions ? this.buildPreviewBufferFromRegions(2) : this.track2Buffer;
+                
+                if (previewTrack1 && previewTrack2) {
+                    this.audioPlayer.playPreviewWithBuffers(previewTrack1, previewTrack2, seekTime);
+                    
+                    // ミュート状態を復元
+                    if (track1Muted) {
+                        this.audioPlayer.setTrack1Mute(true);
+                    }
+                    if (track2Muted) {
+                        this.audioPlayer.setTrack2Mute(true);
+                    }
+                } else {
+                    this.audioPlayer.playPreviewWithBuffers(this.track1Buffer, this.track2Buffer, seekTime);
+                    
+                    // ミュート状態を復元
+                    if (track1Muted) {
+                        this.audioPlayer.setTrack1Mute(true);
+                    }
+                    if (track2Muted) {
+                        this.audioPlayer.setTrack2Mute(true);
+                    }
+                }
             }
         }
     }
@@ -241,6 +270,86 @@ class LoopMaker {
         }
         
         return trimmedBuffer;
+    }
+
+    /**
+     * リージョン情報からプレビュー用のトラックバッファを生成
+     * - トラック全体は無音
+     * - 各リージョン位置に元波形の指定範囲を埋め込む
+     * @param {number} trackNumber 1 or 2
+     * @returns {AudioBuffer}
+     */
+    buildPreviewBufferFromRegions(trackNumber) {
+        if (!this.audioContext) return null;
+
+        const regionController = trackNumber === 1 ? this.regionController1 : this.regionController2;
+        const regions = regionController && regionController.getRegions ? regionController.getRegions() : [];
+
+        // 元波形と利用範囲（グローバルな範囲指定）を取得
+        const sourceBuffer = trackNumber === 1 ? this.originalBuffer1 : this.originalBuffer2;
+        const rangeStart = trackNumber === 1 ? this.useRangeStart1 : this.useRangeStart2;
+        const rangeEnd = trackNumber === 1 ? this.useRangeEnd1 : this.useRangeEnd2;
+        const selectionDuration = sourceBuffer ? Math.max(0, rangeEnd - rangeStart) : 0;
+
+        if (!sourceBuffer || selectionDuration <= 0) {
+            // 元波形や選択範囲がない場合は既存バッファをそのまま返す
+            return trackNumber === 1 ? this.track1Buffer : this.track2Buffer;
+        }
+
+        // ベースとなる長さ（表示範囲と同期させる）
+        const baseDuration =
+            this.trackDisplayDuration ||
+            (trackNumber === 1 && this.track1Buffer ? this.track1Buffer.duration : 0) ||
+            (trackNumber === 2 && this.track2Buffer ? this.track2Buffer.duration : 0);
+
+        if (!baseDuration || baseDuration <= 0) {
+            return trackNumber === 1 ? this.track1Buffer : this.track2Buffer;
+        }
+
+        const sampleRate = this.audioContext.sampleRate;
+        // 2chステレオを前提（mixBuffers側でステレオに統一しているため）
+        const numChannels = 2;
+        const length = Math.floor(baseDuration * sampleRate);
+        const previewBuffer = this.audioContext.createBuffer(numChannels, length, sampleRate);
+
+        // すべて無音で初期化されているので、リージョン部分だけ埋める
+        regions.forEach(region => {
+            if (!region) return;
+
+            const regionStartTime = region.startTime || 0;
+            const regionEndTime = region.endTime || 0;
+            const regionDuration = Math.max(0, regionEndTime - regionStartTime);
+            if (regionDuration <= 0) return;
+
+            // 実際にコピーする長さは「リージョン長」と「選択範囲長」の短い方
+            const availableDuration = Math.min(regionDuration, selectionDuration);
+            if (availableDuration <= 0) return;
+
+            const srcSampleRate = sourceBuffer.sampleRate;
+            const regionStartSample = Math.floor(regionStartTime * sampleRate);
+            const regionLength = Math.floor(availableDuration * sampleRate);
+
+            for (let ch = 0; ch < numChannels; ch++) {
+                const dstData = previewBuffer.getChannelData(ch);
+                const srcCh = Math.min(ch, sourceBuffer.numberOfChannels - 1);
+                const srcData = sourceBuffer.getChannelData(srcCh);
+
+                for (let i = 0; i < regionLength; i++) {
+                    const dstIndex = regionStartSample + i;
+                    if (dstIndex < 0 || dstIndex >= length) break;
+
+                    // 元波形側のサンプル位置（時間ベースで変換）
+                    const t = rangeStart + (i / sampleRate);
+                    const srcIndex = Math.floor(t * srcSampleRate);
+                    if (srcIndex < 0 || srcIndex >= srcData.length) continue;
+
+                    // 複数リージョンが重なる場合は加算（クリッピングはmix時に行う）
+                    dstData[dstIndex] += srcData[srcIndex];
+                }
+            }
+        });
+
+        return previewBuffer;
     }
 
     // 波形上クリックによるシーク

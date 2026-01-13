@@ -434,4 +434,9 @@ class RegionController {
         this.regions = [];
         this.selectedRegion = null;
     }
+
+    // 現在選択されているリージョンを取得
+    getSelectedRegion() {
+        return this.selectedRegion;
+    }
 }

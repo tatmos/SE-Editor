@@ -204,12 +204,45 @@ header h1 {
 
 .track-header {
     margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .track-label {
     font-weight: 600;
     color: #667eea;
     font-size: 14px;
+}
+
+.clear-btn {
+    background: transparent;
+    border: 2px solid #e74c3c;
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0;
+    color: #e74c3c;
+    font-size: 16px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.clear-btn:hover:not(:disabled) {
+    background: #e74c3c;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.clear-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 .level-meter {
@@ -280,11 +313,8 @@ header h1 {
     cursor: crosshair;
     /* タッチ操作時にブラウザのスクロール／ズームジェスチャを抑制してUI操作しやすくする */
     touch-action: none;
-}
-
-    pointer-events: auto;
     /* タッチ操作時のジェスチャ競合を減らす */
-    touch-action: none;
+    pointer-events: auto;
 }
 
 .time-ruler {
