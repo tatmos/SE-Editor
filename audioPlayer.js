@@ -81,9 +81,26 @@ class AudioPlayer {
                 this.multibandCompProcessor.getInputNode &&
                 this.multibandCompProcessor.getOutputNode) {
                 // masterBus -> MultiBand -> destination
-                this.masterBus.connect(this.multibandCompProcessor.getInputNode());
-                this.multibandCompProcessor.getOutputNode().connect(this.audioContext.destination);
+                // 既存の接続を切断してから再接続（再生のたびに）
+                const inputNode = this.multibandCompProcessor.getInputNode();
+                const outputNode = this.multibandCompProcessor.getOutputNode();
+                
+                // 既存の接続を切断
+                if (inputNode && inputNode.numberOfInputs > 0) {
+                    // 入力ノードへの接続を切断（masterBusからの接続を解除）
+                    // ただし、MultiBand内部の接続は維持
+                }
+                if (outputNode && outputNode.numberOfOutputs > 0) {
+                    // 出力ノードからの接続を切断（destinationへの接続を解除）
+                    outputNode.disconnect();
+                }
+                
+                // 再接続
+                this.masterBus.connect(inputNode);
+                outputNode.connect(this.audioContext.destination);
 
+                // MultiBand Compプロセッサのノードは sourceNodes に含めない
+                // （これらは再利用されるため、切断しない）
                 this.sourceNodes = [
                     source1,
                     source2,
@@ -91,9 +108,7 @@ class AudioPlayer {
                     this.gainNode2,
                     this.analyser1,
                     this.analyser2,
-                    this.masterBus,
-                    this.multibandCompProcessor.getInputNode(),
-                    this.multibandCompProcessor.getOutputNode()
+                    this.masterBus
                 ];
             } else {
                 // マルチバンド未設定の場合は従来通り masterBus から直接出力
@@ -138,10 +153,26 @@ class AudioPlayer {
             }
         });
         this.sourceNodes = [];
+        
+        // MultiBand Compプロセッサの出力ノードを切断
+        // （入力ノードは masterBus が切断されることで自動的に切断される）
+        if (this.multibandCompProcessor &&
+            this.multibandCompProcessor.getOutputNode) {
+            try {
+                const outputNode = this.multibandCompProcessor.getOutputNode();
+                if (outputNode) {
+                    outputNode.disconnect();
+                }
+            } catch (e) {
+                // 既に切断されている場合など
+            }
+        }
+        
         this.gainNode1 = null;
         this.gainNode2 = null;
         this.analyser1 = null;
         this.analyser2 = null;
+        this.masterBus = null;
         this.startTime = null;
         this.isPlaying = false;
     }
