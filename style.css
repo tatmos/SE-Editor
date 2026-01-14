@@ -209,6 +209,8 @@ header h1 {
 
 .drop-overlay.hidden {
     opacity: 0;
+    pointer-events: none;
+    display: none;
 }
 
 .track-container {
@@ -814,6 +816,37 @@ header h1 {
     padding: 15px;
     border-radius: 12px;
     margin-bottom: 20px;
+}
+
+.spectrum-mode-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.spectrum-mode-btn {
+    padding: 6px 12px;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    background: white;
+    color: #667eea;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.spectrum-mode-btn:hover {
+    background: #f0f0f0;
+    transform: translateY(-1px);
+}
+
+.spectrum-mode-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+.spectrum-mode-btn.active:hover {
+    background: #5568d3;
 }
 
 .spectrum-controls {
