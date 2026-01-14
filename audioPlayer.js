@@ -17,6 +17,9 @@ class AudioPlayer {
         this.multibandCompProcessor = null;
         this.masterBus = null;
         this.masterAnalyser = null; // マスターバス用のアナライザー（スペクトラム表示用）
+        this.masterChannelSplitter = null; // チャンネル分離用
+        this.masterChannelAnalysers = []; // 各チャンネル用のアナライザー
+        this.maxChannels = 2; // 最大チャンネル数
     }
 
     // ループメーカー側からマルチバンドプロセッサーを受け取る
@@ -82,6 +85,21 @@ class AudioPlayer {
             // 各トラックの出力をマスターバスへ
             this.gainNode1.connect(this.masterBus);
             this.gainNode2.connect(this.masterBus);
+            
+            // 最大チャンネル数を取得（トラック1とトラック2の最大値）
+            const channels1 = track1Buffer ? track1Buffer.numberOfChannels : 1;
+            const channels2 = track2Buffer ? track2Buffer.numberOfChannels : 1;
+            this.maxChannels = Math.max(channels1, channels2);
+            
+            // チャンネル分離用のSplitterと各チャンネル用のアナライザーを作成
+            this.masterChannelSplitter = this.audioContext.createChannelSplitter(this.maxChannels);
+            this.masterChannelAnalysers = [];
+            for (let i = 0; i < this.maxChannels; i++) {
+                const analyser = this.audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8;
+                this.masterChannelAnalysers.push(analyser);
+            }
 
             if (this.multibandCompProcessor &&
                 this.multibandCompProcessor.getInputNode &&
@@ -103,7 +121,14 @@ class AudioPlayer {
                 
                 // 再接続
                 this.masterBus.connect(inputNode);
-                // MultiBand Compの出力（加工後の音）をアナライザーに接続
+                
+                // MultiBand出力 -> チャンネル分離 -> 各チャンネルアナライザー
+                outputNode.connect(this.masterChannelSplitter);
+                for (let i = 0; i < this.maxChannels; i++) {
+                    this.masterChannelSplitter.connect(this.masterChannelAnalysers[i], i);
+                }
+                
+                // MultiBand出力 -> スペクトラム用アナライザー -> destination
                 outputNode.connect(this.masterAnalyser);
                 outputNode.connect(this.audioContext.destination);
 
@@ -117,10 +142,18 @@ class AudioPlayer {
                     this.analyser1,
                     this.analyser2,
                     this.masterBus,
-                    this.masterAnalyser
+                    this.masterAnalyser,
+                    this.masterChannelSplitter,
+                    ...this.masterChannelAnalysers
                 ];
             } else {
                 // マルチバンド未設定の場合は従来通り masterBus から直接出力
+                // チャンネル分離とアナライザーを接続
+                this.masterBus.connect(this.masterChannelSplitter);
+                for (let i = 0; i < this.maxChannels; i++) {
+                    this.masterChannelSplitter.connect(this.masterChannelAnalysers[i], i);
+                }
+                
                 this.masterBus.connect(this.masterAnalyser);
                 this.masterBus.connect(this.audioContext.destination);
                 this.sourceNodes = [
@@ -131,7 +164,9 @@ class AudioPlayer {
                     this.analyser1,
                     this.analyser2,
                     this.masterBus,
-                    this.masterAnalyser
+                    this.masterAnalyser,
+                    this.masterChannelSplitter,
+                    ...this.masterChannelAnalysers
                 ];
             }
             this.loopDuration = loopDuration;
@@ -185,6 +220,9 @@ class AudioPlayer {
         this.analyser2 = null;
         this.masterBus = null;
         this.masterAnalyser = null;
+        this.masterChannelSplitter = null;
+        this.masterChannelAnalysers = [];
+        this.maxChannels = 2;
         this.startTime = null;
         this.isPlaying = false;
     }
@@ -220,6 +258,48 @@ class AudioPlayer {
         
         // 0-100の範囲に正規化
         return average / 255;
+    }
+    
+    /**
+     * 加工後のレベルをチャンネルごとに取得
+     * @returns {Array<number>} 各チャンネルのレベル（0-1の範囲）
+     */
+    getProcessedLevels() {
+        if (!this.masterChannelAnalysers || this.masterChannelAnalysers.length === 0) {
+            return [];
+        }
+        
+        const levels = [];
+        for (let i = 0; i < this.masterChannelAnalysers.length; i++) {
+            const analyser = this.masterChannelAnalysers[i];
+            if (!analyser) {
+                levels.push(0);
+                continue;
+            }
+            
+            // 時系列データを取得
+            const bufferLength = analyser.fftSize;
+            const dataArray = new Float32Array(bufferLength);
+            analyser.getFloatTimeDomainData(dataArray);
+            
+            // RMS（実効値）を計算
+            let sum = 0;
+            for (let j = 0; j < dataArray.length; j++) {
+                sum += dataArray[j] * dataArray[j];
+            }
+            const rms = Math.sqrt(sum / dataArray.length);
+            
+            levels.push(rms);
+        }
+        
+        return levels;
+    }
+    
+    /**
+     * 最大チャンネル数を取得
+     */
+    getMaxChannels() {
+        return this.maxChannels || 2;
     }
 
     setTrack1Mute(muted) {

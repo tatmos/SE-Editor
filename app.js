@@ -33,6 +33,7 @@ class LoopMaker {
         const ruler2 = document.getElementById('ruler-track2');
         this.levelMeter1 = document.getElementById('level-meter-track1');
         this.levelMeter2 = document.getElementById('level-meter-track2');
+        this.processedLevelMetersContainer = document.getElementById('processed-level-meters');
         const spectrumCanvas = document.getElementById('spectrum-canvas');
         
         this.originalWaveformViewer1 = new OriginalWaveformViewer(originalCanvas1, originalRuler1);
@@ -437,8 +438,47 @@ class LoopMaker {
             }
         }
         
+        // 加工後のレベルメーターを更新
+        this.updateProcessedLevelMeters();
+        
         // スペクトラムアナライザーを更新
         this.updateSpectrum();
+    }
+    
+    updateProcessedLevelMeters() {
+        if (!this.audioPlayer || !this.processedLevelMetersContainer) return;
+        
+        const maxChannels = this.audioPlayer.getMaxChannels();
+        const levels = this.audioPlayer.getProcessedLevels();
+        
+        // レベルメーターの数を調整
+        const currentMeters = this.processedLevelMetersContainer.children.length;
+        if (currentMeters !== maxChannels) {
+            this.processedLevelMetersContainer.innerHTML = '';
+            for (let i = 0; i < maxChannels; i++) {
+                const meter = document.createElement('div');
+                meter.className = 'processed-level-meter';
+                meter.innerHTML = `
+                    <div class="processed-level-meter-label">Ch ${i + 1}</div>
+                    <div class="level-meter">
+                        <div class="level-bar"></div>
+                    </div>
+                `;
+                this.processedLevelMetersContainer.appendChild(meter);
+            }
+        }
+        
+        // 各チャンネルのレベルを更新
+        for (let i = 0; i < maxChannels; i++) {
+            const meter = this.processedLevelMetersContainer.children[i];
+            if (meter) {
+                const bar = meter.querySelector('.level-bar');
+                if (bar) {
+                    const level = i < levels.length ? levels[i] : 0;
+                    bar.style.height = (level * 100) + '%';
+                }
+            }
+        }
     }
     
     updateSpectrum() {
@@ -511,6 +551,9 @@ class LoopMaker {
             if (this.audioPlayer && this.audioPlayer.setMultiBandProcessor) {
                 this.audioPlayer.setMultiBandProcessor(this.multibandCompProcessor);
             }
+            
+            // 詳細ボタンのイベントリスナーを設定
+            this.setupMultibandDetailButton();
         }
         
         // Spatial Design
@@ -520,7 +563,27 @@ class LoopMaker {
             this.spatialDesignUI = new SpatialDesignUI(spatialCanvas, this.spatialDesignProcessor);
         }
     }
-
+    
+    setupMultibandDetailButton() {
+        const detailBtn = document.getElementById('comp-detail-btn');
+        const detailsArea = document.getElementById('multiband-details');
+        
+        if (detailBtn && detailsArea) {
+            detailBtn.addEventListener('click', () => {
+                const isOpen = detailsArea.style.display !== 'none';
+                if (isOpen) {
+                    detailsArea.style.display = 'none';
+                    detailBtn.textContent = '▼';
+                    detailBtn.classList.remove('open');
+                } else {
+                    detailsArea.style.display = 'block';
+                    detailBtn.textContent = '▲';
+                    detailBtn.classList.add('open');
+                }
+            });
+        }
+    }
+    
 }
 
 // アプリケーション初期化

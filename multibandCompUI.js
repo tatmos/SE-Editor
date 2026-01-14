@@ -46,9 +46,12 @@ class MultiBandCompUI {
             { id: 'comp-m-down', param: 'mid', type: 'down' },
             { id: 'comp-l-up', param: 'low', type: 'up' },
             { id: 'comp-l-down', param: 'low', type: 'down' },
-            { id: 'comp-h-gain', param: 'high', type: 'gain' },
-            { id: 'comp-m-gain', param: 'mid', type: 'gain' },
-            { id: 'comp-l-gain', param: 'low', type: 'gain' },
+            { id: 'comp-h-gain', param: 'high', type: 'gain', syncId: 'comp-h-gain-detail' },
+            { id: 'comp-m-gain', param: 'mid', type: 'gain', syncId: 'comp-m-gain-detail' },
+            { id: 'comp-l-gain', param: 'low', type: 'gain', syncId: 'comp-l-gain-detail' },
+            { id: 'comp-h-gain-detail', param: 'high', type: 'gain', syncId: 'comp-h-gain' },
+            { id: 'comp-m-gain-detail', param: 'mid', type: 'gain', syncId: 'comp-m-gain' },
+            { id: 'comp-l-gain-detail', param: 'low', type: 'gain', syncId: 'comp-l-gain' },
             { id: 'comp-mix', param: 'mix', type: 'mix' },
             { id: 'comp-low-mid-crossover', param: 'lowMidCrossover', type: 'crossover' },
             { id: 'comp-mid-high-crossover', param: 'midHighCrossover', type: 'crossover' }
@@ -67,6 +70,15 @@ class MultiBandCompUI {
                         // gain と up/down をまとめて扱う
                         this.params[slider.param][slider.type] = value;
                     }
+                    
+                    // 同期するスライダーがあれば更新
+                    if (slider.syncId) {
+                        const syncElement = document.getElementById(slider.syncId);
+                        if (syncElement) {
+                            syncElement.value = value;
+                        }
+                    }
+                    
                     this.updateDisplay();
                     this.updateProcessor();
                 });
@@ -109,12 +121,15 @@ class MultiBandCompUI {
             'comp-h-up-value': Math.round(this.params.high.up),
             'comp-h-down-value': Math.round(this.params.high.down),
             'comp-h-gain-value': Math.round(this.params.high.gain),
+            'comp-h-gain-detail-value': Math.round(this.params.high.gain),
             'comp-m-up-value': Math.round(this.params.mid.up),
             'comp-m-down-value': Math.round(this.params.mid.down),
             'comp-m-gain-value': Math.round(this.params.mid.gain),
+            'comp-m-gain-detail-value': Math.round(this.params.mid.gain),
             'comp-l-up-value': Math.round(this.params.low.up),
             'comp-l-down-value': Math.round(this.params.low.down),
             'comp-l-gain-value': Math.round(this.params.low.gain),
+            'comp-l-gain-detail-value': Math.round(this.params.low.gain),
             'comp-mix-value': Math.round(this.params.mix),
             'comp-low-mid-crossover-value': Math.round(this.params.lowMidCrossover),
             'comp-mid-high-crossover-value': Math.round(this.params.midHighCrossover)
@@ -128,6 +143,23 @@ class MultiBandCompUI {
                 } else {
                     element.textContent = value + '%';
                 }
+            }
+        });
+        
+        // Gainスライダーの値も同期
+        const gainSliders = [
+            { main: 'comp-h-gain', detail: 'comp-h-gain-detail', param: 'high' },
+            { main: 'comp-m-gain', detail: 'comp-m-gain-detail', param: 'mid' },
+            { main: 'comp-l-gain', detail: 'comp-l-gain-detail', param: 'low' }
+        ];
+        
+        gainSliders.forEach(({ main, detail, param }) => {
+            const mainSlider = document.getElementById(main);
+            const detailSlider = document.getElementById(detail);
+            if (mainSlider && detailSlider) {
+                const value = this.params[param].gain;
+                mainSlider.value = value;
+                detailSlider.value = value;
             }
         });
     }
@@ -147,6 +179,10 @@ class MultiBandCompUI {
         if (bypassButton) {
             bypassButton.disabled = false;
         }
+        const detailButton = document.getElementById('comp-detail-btn');
+        if (detailButton) {
+            detailButton.disabled = false;
+        }
     }
     
     disable() {
@@ -157,6 +193,10 @@ class MultiBandCompUI {
         const bypassButton = document.getElementById('comp-bypass');
         if (bypassButton) {
             bypassButton.disabled = true;
+        }
+        const detailButton = document.getElementById('comp-detail-btn');
+        if (detailButton) {
+            detailButton.disabled = false; // 詳細ボタンは常に有効（折りたたみ用）
         }
     }
     

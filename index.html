@@ -169,8 +169,36 @@
         <div class="multiband-comp-container">
             <div class="track-header">
                 <div class="track-label">3-Band MultiBand Up/Down Comp</div>
-                <button id="comp-bypass" class="bypass-btn" disabled>Bypass</button>
+                <div class="track-header-buttons">
+                    <button id="comp-bypass" class="bypass-btn" disabled>Bypass</button>
+                    <button id="comp-detail-btn" class="detail-btn" disabled>▼</button>
+                </div>
             </div>
+            <div class="comp-main-controls">
+                <div class="comp-gain-controls">
+                    <div class="comp-gain-control">
+                        <label for="comp-h-gain">H Gain:</label>
+                        <input type="range" id="comp-h-gain" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-h-gain-value">100%</span>
+                    </div>
+                    <div class="comp-gain-control">
+                        <label for="comp-m-gain">M Gain:</label>
+                        <input type="range" id="comp-m-gain" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-m-gain-value">100%</span>
+                    </div>
+                    <div class="comp-gain-control">
+                        <label for="comp-l-gain">L Gain:</label>
+                        <input type="range" id="comp-l-gain" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-l-gain-value">100%</span>
+                    </div>
+                </div>
+                <div class="comp-mix-control">
+                    <label for="comp-mix">Mix:</label>
+                    <input type="range" id="comp-mix" class="slider" min="0" max="100" value="100" disabled>
+                    <span id="comp-mix-value">100%</span>
+                </div>
+            </div>
+            <div class="multiband-details" id="multiband-details" style="display: none;">
             <div class="multiband-controls">
                 <div class="band-control">
                     <label>H (High)</label>
@@ -186,8 +214,8 @@
                     </div>
                     <div class="comp-row">
                         <label>Gain:</label>
-                        <input type="range" id="comp-h-gain" class="slider" min="0" max="200" value="100" disabled>
-                        <span id="comp-h-gain-value">100%</span>
+                        <input type="range" id="comp-h-gain-detail" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-h-gain-detail-value">100%</span>
                     </div>
                 </div>
                 <div class="band-control">
@@ -204,8 +232,8 @@
                     </div>
                     <div class="comp-row">
                         <label>Gain:</label>
-                        <input type="range" id="comp-m-gain" class="slider" min="0" max="200" value="100" disabled>
-                        <span id="comp-m-gain-value">100%</span>
+                        <input type="range" id="comp-m-gain-detail" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-m-gain-detail-value">100%</span>
                     </div>
                 </div>
                 <div class="band-control">
@@ -222,15 +250,10 @@
                     </div>
                     <div class="comp-row">
                         <label>Gain:</label>
-                        <input type="range" id="comp-l-gain" class="slider" min="0" max="200" value="100" disabled>
-                        <span id="comp-l-gain-value">100%</span>
+                        <input type="range" id="comp-l-gain-detail" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-l-gain-detail-value">100%</span>
                     </div>
                 </div>
-            </div>
-            <div class="comp-mix-control">
-                <label for="comp-mix">Mix:</label>
-                <input type="range" id="comp-mix" class="slider" min="0" max="100" value="100" disabled>
-                <span id="comp-mix-value">100%</span>
             </div>
             <div class="comp-crossover-controls">
                 <div class="comp-crossover-control">
@@ -243,6 +266,7 @@
                     <input type="range" id="comp-mid-high-crossover" class="slider" min="1000" max="10000" value="3000" step="50" disabled>
                     <span id="comp-mid-high-crossover-value">3000 Hz</span>
                 </div>
+            </div>
             </div>
         </div>
 
@@ -267,6 +291,16 @@
                     <span id="sonogram-scale-value">70</span>
                     <span>%Log</span>
                 </div>
+            </div>
+        </div>
+
+        <!-- 加工後のレベルメーター -->
+        <div class="processed-level-meter-container">
+            <div class="track-header">
+                <div class="track-label">加工後のレベルメーター</div>
+            </div>
+            <div class="processed-level-meters" id="processed-level-meters">
+                <!-- 動的に生成される -->
             </div>
         </div>
 
