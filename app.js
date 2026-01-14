@@ -33,6 +33,7 @@ class LoopMaker {
         const ruler2 = document.getElementById('ruler-track2');
         this.levelMeter1 = document.getElementById('level-meter-track1');
         this.levelMeter2 = document.getElementById('level-meter-track2');
+        const spectrumCanvas = document.getElementById('spectrum-canvas');
         
         this.originalWaveformViewer1 = new OriginalWaveformViewer(originalCanvas1, originalRuler1);
         this.originalWaveformViewer1.onRangeChange = (startTime, endTime) => {
@@ -66,6 +67,13 @@ class LoopMaker {
         this.multibandCompProcessor = null;
         this.spatialDesignUI = null;
         this.spatialDesignProcessor = null;
+        
+        // スペクトラムアナライザーを初期化
+        this.spectrumAnalyzer = null;
+        if (spectrumCanvas) {
+            this.spectrumAnalyzer = new SpectrumAnalyzer(spectrumCanvas);
+            this.spectrumAnalyzer.clear(); // 初期状態をクリア
+        }
     }
 
     updateBuffers() {
@@ -428,6 +436,24 @@ class LoopMaker {
                 bar2.style.height = (level2 * 100) + '%';
             }
         }
+        
+        // スペクトラムアナライザーを更新
+        this.updateSpectrum();
+    }
+    
+    updateSpectrum() {
+        if (!this.audioPlayer || !this.spectrumAnalyzer) return;
+        
+        const freqData = this.audioPlayer.getFrequencyData();
+        if (freqData) {
+            this.spectrumAnalyzer.draw(
+                freqData.data,
+                freqData.sampleRate,
+                freqData.fftSize
+            );
+        } else {
+            this.spectrumAnalyzer.clear();
+        }
     }
 
     resetLevelMeters() {
@@ -443,6 +469,11 @@ class LoopMaker {
             if (bar2) {
                 bar2.style.height = '0%';
             }
+        }
+        
+        // スペクトラムアナライザーをクリア
+        if (this.spectrumAnalyzer) {
+            this.spectrumAnalyzer.clear();
         }
     }
 

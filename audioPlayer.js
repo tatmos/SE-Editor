@@ -16,6 +16,7 @@ class AudioPlayer {
         // マスターバス用 3-Band MultiBand Processor
         this.multibandCompProcessor = null;
         this.masterBus = null;
+        this.masterAnalyser = null; // マスターバス用のアナライザー（スペクトラム表示用）
     }
 
     // ループメーカー側からマルチバンドプロセッサーを受け取る
@@ -72,6 +73,11 @@ class AudioPlayer {
 
             // マスターバス（2トラックをまとめて3バンド処理）
             this.masterBus = this.audioContext.createGain();
+            
+            // マスターバス用のアナライザー（スペクトラム表示用）
+            this.masterAnalyser = this.audioContext.createAnalyser();
+            this.masterAnalyser.fftSize = 2048; // より高解像度なスペクトラム分析
+            this.masterAnalyser.smoothingTimeConstant = 0.8;
 
             // 各トラックの出力をマスターバスへ
             this.gainNode1.connect(this.masterBus);
@@ -97,6 +103,8 @@ class AudioPlayer {
                 
                 // 再接続
                 this.masterBus.connect(inputNode);
+                // MultiBand Compの出力（加工後の音）をアナライザーに接続
+                outputNode.connect(this.masterAnalyser);
                 outputNode.connect(this.audioContext.destination);
 
                 // MultiBand Compプロセッサのノードは sourceNodes に含めない
@@ -108,10 +116,12 @@ class AudioPlayer {
                     this.gainNode2,
                     this.analyser1,
                     this.analyser2,
-                    this.masterBus
+                    this.masterBus,
+                    this.masterAnalyser
                 ];
             } else {
                 // マルチバンド未設定の場合は従来通り masterBus から直接出力
+                this.masterBus.connect(this.masterAnalyser);
                 this.masterBus.connect(this.audioContext.destination);
                 this.sourceNodes = [
                     source1,
@@ -120,7 +130,8 @@ class AudioPlayer {
                     this.gainNode2,
                     this.analyser1,
                     this.analyser2,
-                    this.masterBus
+                    this.masterBus,
+                    this.masterAnalyser
                 ];
             }
             this.loopDuration = loopDuration;
@@ -173,8 +184,24 @@ class AudioPlayer {
         this.analyser1 = null;
         this.analyser2 = null;
         this.masterBus = null;
+        this.masterAnalyser = null;
         this.startTime = null;
         this.isPlaying = false;
+    }
+    
+    // マスターバスの周波数スペクトラムデータを取得
+    getFrequencyData() {
+        if (!this.masterAnalyser) return null;
+        
+        const bufferLength = this.masterAnalyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        this.masterAnalyser.getByteFrequencyData(dataArray);
+        
+        return {
+            data: dataArray,
+            sampleRate: this.audioContext.sampleRate,
+            fftSize: this.masterAnalyser.fftSize
+        };
     }
 
     getLevel(trackNumber) {
