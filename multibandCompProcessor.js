@@ -17,6 +17,11 @@ class MultiBandCompProcessor {
         this.inputGain = null;
         this.outputGain = null;
         
+        // Mix用のノード
+        this.bypassGain = null;        // バイパス経路のゲイン
+        this.effectMixGain = null;     // エフェクト経路のMixゲイン
+        this.bypassMixGain = null;     // バイパス経路のMixゲイン
+        
         this.params = {
             // 将来的なUp/Down Comp用のパラメータは残しつつ、
             // まずは各バンドのGainだけを利用する
@@ -59,8 +64,15 @@ class MultiBandCompProcessor {
         this.midGain = this.audioContext.createGain();
         this.highGain = this.audioContext.createGain();
 
-        // ノード接続（3バンドに分割して合算）
-        // 入力 -> 各フィルター -> 各バンドゲイン -> 出力
+        // Mix用のノード
+        this.bypassGain = this.audioContext.createGain();
+        this.bypassGain.gain.value = 1.0;  // バイパスはそのまま
+        
+        this.effectMixGain = this.audioContext.createGain();
+        this.bypassMixGain = this.audioContext.createGain();
+
+        // ノード接続
+        // エフェクト経路: 入力 -> 各フィルター -> 各バンドゲイン -> エフェクトMixゲイン -> 出力
         this.inputGain.connect(this.lowFilter);
         this.inputGain.connect(this.midFilter);
         this.inputGain.connect(this.highFilter);
@@ -69,9 +81,17 @@ class MultiBandCompProcessor {
         this.midFilter.connect(this.midGain);
         this.highFilter.connect(this.highGain);
 
-        this.lowGain.connect(this.outputGain);
-        this.midGain.connect(this.outputGain);
-        this.highGain.connect(this.outputGain);
+        this.lowGain.connect(this.effectMixGain);
+        this.midGain.connect(this.effectMixGain);
+        this.highGain.connect(this.effectMixGain);
+
+        // バイパス経路: 入力 -> バイパスゲイン -> バイパスMixゲイン -> 出力
+        this.inputGain.connect(this.bypassGain);
+        this.bypassGain.connect(this.bypassMixGain);
+
+        // Mix: エフェクト経路とバイパス経路を合算して出力
+        this.effectMixGain.connect(this.outputGain);
+        this.bypassMixGain.connect(this.outputGain);
     }
     
     updateMultiBandComp(params) {
@@ -94,6 +114,19 @@ class MultiBandCompProcessor {
         if (this.highGain && params.high) {
             const gain = toLinearGain(params.high.gain ?? 100);
             this.highGain.gain.value = gain;
+        }
+
+        // Mix値を更新（0–100% を 0.0–1.0 のリニアゲインにマップ）
+        const mix = params.mix ?? 100;
+        const clampedMix = Math.max(0, Math.min(100, mix));
+        const effectMix = clampedMix / 100;      // エフェクト経路のゲイン
+        const bypassMix = (100 - clampedMix) / 100;  // バイパス経路のゲイン
+
+        if (this.effectMixGain) {
+            this.effectMixGain.gain.value = effectMix;
+        }
+        if (this.bypassMixGain) {
+            this.bypassMixGain.gain.value = bypassMix;
         }
     }
     
