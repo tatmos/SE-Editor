@@ -484,20 +484,31 @@ class LoopMaker {
     updateSpectrum() {
         if (!this.audioPlayer || !this.spectrumAnalyzer) return;
         
-        // 更新頻度をチェック（スペクトラム/ソノグラム共通）
+        // 更新頻度をチェック（スペクトラム/ソノグラム/波形共通）
         if (this.spectrumAnalyzer.shouldUpdateRender && !this.spectrumAnalyzer.shouldUpdateRender()) {
             return;
         }
         
-        const freqData = this.audioPlayer.getFrequencyData();
-        if (freqData) {
-            this.spectrumAnalyzer.draw(
-                freqData.data,
-                freqData.sampleRate,
-                freqData.fftSize
-            );
+        if (this.spectrumAnalyzer.mode === 'waveform') {
+            // 波形モード: 時系列データを取得
+            const timeDomainData = this.audioPlayer.getTimeDomainData();
+            if (timeDomainData) {
+                this.spectrumAnalyzer.draw(null, 0, 0, timeDomainData);
+            } else {
+                this.spectrumAnalyzer.clear();
+            }
         } else {
-            this.spectrumAnalyzer.clear();
+            // スペクトラム/ソノグラムモード: 周波数データを取得
+            const freqData = this.audioPlayer.getFrequencyData();
+            if (freqData) {
+                this.spectrumAnalyzer.draw(
+                    freqData.data,
+                    freqData.sampleRate,
+                    freqData.fftSize
+                );
+            } else {
+                this.spectrumAnalyzer.clear();
+            }
         }
     }
 

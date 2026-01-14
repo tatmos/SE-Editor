@@ -6,13 +6,20 @@ class SpectrumAnalyzer {
         this.width = canvas.width;
         this.height = canvas.height;
         
-        // 表示モード: 'spectrum' または 'sonogram'
+        // 表示モード: 'spectrum'、'sonogram'、または 'waveform'
         this.mode = 'spectrum';
         
         // ソノグラム用のデータバッファ（時間×周波数の2次元配列）
         this.sonogramData = [];
         this.sonogramColumnIndex = 0; // 現在描画している列のインデックス
         this.sonogramMaxColumns = 0; // キャンバス幅に応じた最大列数
+        
+        // 波形用のデータバッファ（時間×チャンネル×サンプルの3次元配列）
+        this.waveformData = []; // 各列の波形データ
+        this.waveformColumnIndex = 0; // 現在描画している列のインデックス
+        this.waveformMaxColumns = 0; // キャンバス幅に応じた最大列数
+        this.waveformOffscreenCanvas = null; // 波形用オフスクリーンキャンバス
+        this.waveformOffscreenCtx = null;
         
         // パフォーマンス最適化用のオフスクリーンキャンバス
         this.sonogramOffscreenCanvas = null;
@@ -49,6 +56,7 @@ class SpectrumAnalyzer {
     setupModeButtons() {
         const spectrumBtn = document.getElementById('spectrum-mode-spectrum');
         const sonogramBtn = document.getElementById('spectrum-mode-sonogram');
+        const waveformBtn = document.getElementById('spectrum-mode-waveform');
         
         if (spectrumBtn) {
             spectrumBtn.addEventListener('click', () => {
@@ -59,6 +67,12 @@ class SpectrumAnalyzer {
         if (sonogramBtn) {
             sonogramBtn.addEventListener('click', () => {
                 this.setMode('sonogram');
+            });
+        }
+        
+        if (waveformBtn) {
+            waveformBtn.addEventListener('click', () => {
+                this.setMode('waveform');
             });
         }
     }
@@ -127,20 +141,46 @@ class SpectrumAnalyzer {
         // ボタンの状態を更新
         const spectrumBtn = document.getElementById('spectrum-mode-spectrum');
         const sonogramBtn = document.getElementById('spectrum-mode-sonogram');
+        const waveformBtn = document.getElementById('spectrum-mode-waveform');
         
-        if (spectrumBtn && sonogramBtn) {
+        if (spectrumBtn && sonogramBtn && waveformBtn) {
+            spectrumBtn.classList.remove('active');
+            sonogramBtn.classList.remove('active');
+            waveformBtn.classList.remove('active');
+            
             if (mode === 'spectrum') {
                 spectrumBtn.classList.add('active');
-                sonogramBtn.classList.remove('active');
-            } else {
-                spectrumBtn.classList.remove('active');
+            } else if (mode === 'sonogram') {
                 sonogramBtn.classList.add('active');
+            } else if (mode === 'waveform') {
+                waveformBtn.classList.add('active');
             }
         }
         
         // ソノグラムモードに切り替えた場合、バッファをリセット
         if (mode === 'sonogram') {
             this.resetSonogram();
+        }
+        
+        // 波形モードに切り替えた場合、バッファをリセット
+        if (mode === 'waveform') {
+            // バッファはリセットするが、オフスクリーンキャンバスは保持
+            this.waveformData = [];
+            this.waveformColumnIndex = 0;
+            this.updateWaveformMaxColumns();
+            // オフスクリーンキャンバスを初期化
+            const drawWidth = this.width - this.marginLeft - this.marginRight;
+            const drawHeight = this.height - this.marginTop - this.marginBottom;
+            if (!this.waveformOffscreenCanvas) {
+                this.waveformOffscreenCanvas = document.createElement('canvas');
+                this.waveformOffscreenCanvas.width = drawWidth;
+                this.waveformOffscreenCanvas.height = drawHeight;
+                this.waveformOffscreenCtx = this.waveformOffscreenCanvas.getContext('2d');
+            }
+            this.waveformOffscreenCanvas.width = drawWidth;
+            this.waveformOffscreenCanvas.height = drawHeight;
+            this.waveformOffscreenCtx.fillStyle = '#1a1a1a';
+            this.waveformOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
         }
 
         // モード切替時にカウンターもリセット（体感の不整合を防ぐ）
@@ -178,6 +218,29 @@ class SpectrumAnalyzer {
         this.sonogramMaxColumns = Math.max(1, Math.floor(drawWidth / 2));
     }
     
+    updateWaveformMaxColumns() {
+        // キャンバス幅に応じて最大列数を計算（時間軸の表示量を半分に）
+        // 描画領域の幅を使用（マージンを除く）
+        const drawWidth = this.width - this.marginLeft - this.marginRight;
+        // 1ピクセル = 1列ではなく、2ピクセル = 1列として表示量を減らす
+        this.waveformMaxColumns = Math.max(1, Math.floor(drawWidth / 2));
+    }
+    
+    resetWaveform() {
+        this.waveformData = [];
+        this.waveformColumnIndex = 0;
+        this.updateWaveformMaxColumns();
+        // オフスクリーンキャンバスもリセット
+        const drawWidth = this.width - this.marginLeft - this.marginRight;
+        const drawHeight = this.height - this.marginTop - this.marginBottom;
+        if (this.waveformOffscreenCanvas && this.waveformOffscreenCtx) {
+            this.waveformOffscreenCanvas.width = drawWidth;
+            this.waveformOffscreenCanvas.height = drawHeight;
+            this.waveformOffscreenCtx.fillStyle = '#1a1a1a';
+            this.waveformOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
+        }
+    }
+    
     resize() {
         const rect = this.canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
@@ -190,9 +253,10 @@ class SpectrumAnalyzer {
         this.canvas.style.width = this.width + 'px';
         this.canvas.style.height = this.height + 'px';
         
-        // 幅が変わった場合、ソノグラムの最大列数を更新
+        // 幅が変わった場合、ソノグラムと波形の最大列数を更新
         if (oldWidth !== this.width) {
             this.updateSonogramMaxColumns();
+            this.updateWaveformMaxColumns();
             // ソノグラムデータをリセット（幅が変わったため）
             if (this.mode === 'sonogram') {
                 this.resetSonogram();
@@ -204,24 +268,45 @@ class SpectrumAnalyzer {
                     this.sonogramOffscreenCanvas.height = drawHeight;
                 }
             }
+            // 波形データをリセット（幅が変わったため）
+            if (this.mode === 'waveform') {
+                this.resetWaveform();
+                // オフスクリーンキャンバスも再作成（描画領域のサイズ）
+                if (this.waveformOffscreenCanvas) {
+                    const drawWidth = this.width - this.marginLeft - this.marginRight;
+                    const drawHeight = this.height - this.marginTop - this.marginBottom;
+                    this.waveformOffscreenCanvas.width = drawWidth;
+                    this.waveformOffscreenCanvas.height = drawHeight;
+                }
+            }
         }
     }
     
     /**
-     * 周波数スペクトラムを描画
+     * 周波数スペクトラムまたは波形を描画
      * @param {Uint8Array} frequencyData - 周波数データ（0-255）
      * @param {number} sampleRate - サンプルレート
      * @param {number} fftSize - FFTサイズ
+     * @param {Float32Array|Array<Float32Array>} timeDomainData - 時系列データ（波形モード用、オプション）
      */
-    draw(frequencyData, sampleRate, fftSize) {
-        if (!frequencyData || frequencyData.length === 0) {
-            this.clear();
-            return;
-        }
-        
-        if (this.mode === 'sonogram') {
+    draw(frequencyData, sampleRate, fftSize, timeDomainData = null) {
+        if (this.mode === 'waveform') {
+            if (timeDomainData) {
+                this.drawWaveform(timeDomainData, sampleRate);
+            } else {
+                this.clear();
+            }
+        } else if (this.mode === 'sonogram') {
+            if (!frequencyData || frequencyData.length === 0) {
+                this.clear();
+                return;
+            }
             this.drawSonogram(frequencyData, sampleRate, fftSize);
         } else {
+            if (!frequencyData || frequencyData.length === 0) {
+                this.clear();
+                return;
+            }
             this.drawSpectrum(frequencyData, sampleRate, fftSize);
         }
     }
@@ -532,6 +617,214 @@ class SpectrumAnalyzer {
     }
     
     /**
+     * 波形を描画（ソノグラムと同様に左から右へ、右端までいったら左から上書き）
+     */
+    drawWaveform(timeDomainData, sampleRate) {
+        if (!timeDomainData || !Array.isArray(timeDomainData) || timeDomainData.length === 0) {
+            this.clear();
+            return;
+        }
+        
+        const ctx = this.ctx;
+        const width = this.width;
+        const height = this.height;
+        
+        // 描画領域（マージンを除いた領域）
+        const drawX = this.marginLeft;
+        const drawY = this.marginTop;
+        const drawWidth = width - this.marginLeft - this.marginRight;
+        const drawHeight = height - this.marginTop - this.marginBottom;
+        
+        // 時系列データを配列に変換（複数チャンネルの場合）
+        const channels = Array.isArray(timeDomainData) ? timeDomainData : [timeDomainData];
+        const numChannels = channels.length;
+        
+        // 有効なチャンネルデータをフィルタリング
+        const validChannels = channels.filter(ch => ch && ch.length > 0);
+        if (validChannels.length === 0) {
+            this.clear();
+            return;
+        }
+        
+        // 現在の列のデータをバッファに追加
+        const columnData = validChannels.map(ch => {
+            const data = new Float32Array(ch.length);
+            for (let i = 0; i < ch.length; i++) {
+                data[i] = ch[i];
+            }
+            return data;
+        });
+        
+        // バッファに追加（左から右へ）
+        const colIndex = this.waveformColumnIndex % this.waveformMaxColumns;
+        this.waveformData[colIndex] = columnData;
+        this.waveformColumnIndex++;
+        
+        // オフスクリーンキャンバスを使用してパフォーマンスを向上
+        if (!this.waveformOffscreenCanvas) {
+            this.waveformOffscreenCanvas = document.createElement('canvas');
+            this.waveformOffscreenCanvas.width = drawWidth;
+            this.waveformOffscreenCanvas.height = drawHeight;
+            this.waveformOffscreenCtx = this.waveformOffscreenCanvas.getContext('2d');
+            // 初期クリア
+            this.waveformOffscreenCtx.fillStyle = '#1a1a1a';
+            this.waveformOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
+        }
+
+        // リサイズ等でサイズがずれていたら合わせる
+        if (this.waveformOffscreenCanvas.width !== drawWidth || this.waveformOffscreenCanvas.height !== drawHeight) {
+            this.waveformOffscreenCanvas.width = drawWidth;
+            this.waveformOffscreenCanvas.height = drawHeight;
+            this.waveformOffscreenCtx.fillStyle = '#1a1a1a';
+            this.waveformOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
+        }
+        
+        const offscreenCtx = this.waveformOffscreenCtx;
+
+        // 仕様どおり「左から上書き」: 上書き対象の列だけ消して描き直す
+        const columnWidth = drawWidth / this.waveformMaxColumns;
+        const x = colIndex * columnWidth;
+        
+        // 上書き対象の列をクリア
+        offscreenCtx.fillStyle = '#1a1a1a';
+        offscreenCtx.fillRect(x, 0, Math.ceil(columnWidth), drawHeight);
+        
+        // 新しい列を描画
+        this.drawWaveformColumn(offscreenCtx, columnData, colIndex, drawWidth, drawHeight, validChannels.length);
+        
+        // 背景をクリア
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, width, height);
+        
+        // オフスクリーンキャンバスをメインキャンバスにコピー（描画領域内）
+        ctx.drawImage(this.waveformOffscreenCanvas, drawX, drawY);
+        
+        // グリッドを描画
+        this.drawWaveformGrid(ctx, drawX, drawY, drawWidth, drawHeight, validChannels.length);
+    }
+    
+    /**
+     * 波形の全データを再描画（モード切り替え時など）
+     */
+    redrawAllWaveform() {
+        if (this.mode !== 'waveform' || !this.waveformOffscreenCanvas || !this.waveformOffscreenCtx) {
+            return;
+        }
+        
+        const drawWidth = this.width - this.marginLeft - this.marginRight;
+        const drawHeight = this.height - this.marginTop - this.marginBottom;
+        
+        // オフスクリーンキャンバスをクリア
+        this.waveformOffscreenCtx.fillStyle = '#1a1a1a';
+        this.waveformOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
+        
+        // 全列を再描画
+        for (let i = 0; i < this.waveformData.length; i++) {
+            if (this.waveformData[i] && this.waveformData[i].length > 0) {
+                const numChannels = this.waveformData[i].length;
+                this.drawWaveformColumn(this.waveformOffscreenCtx, this.waveformData[i], i % this.waveformMaxColumns, drawWidth, drawHeight, numChannels);
+            }
+        }
+    }
+    
+    /**
+     * 波形の1列を描画
+     */
+    drawWaveformColumn(ctx, columnData, colIndex, drawWidth, drawHeight, numChannels) {
+        const columnWidth = drawWidth / this.waveformMaxColumns;
+        const x = colIndex * columnWidth;
+        const channelHeight = drawHeight / numChannels;
+        
+        for (let ch = 0; ch < numChannels; ch++) {
+            const channelData = columnData[ch];
+            if (!channelData || channelData.length === 0) continue;
+            
+            const yOffset = ch * channelHeight;
+            const centerY = yOffset + channelHeight / 2;
+            
+            // 波形を描画
+            ctx.strokeStyle = ch === 0 ? '#667eea' : '#764ba2';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            // サンプルをピクセルにマッピング
+            const samplesPerPixel = Math.max(1, Math.floor(channelData.length / columnWidth));
+            
+            for (let px = 0; px < columnWidth; px++) {
+                const sampleStart = px * samplesPerPixel;
+                const sampleEnd = Math.min(channelData.length, (px + 1) * samplesPerPixel);
+                
+                // このピクセル範囲の最大値と最小値を計算
+                let max = -Infinity;
+                let min = Infinity;
+                for (let i = sampleStart; i < sampleEnd; i++) {
+                    const value = channelData[i];
+                    if (value > max) max = value;
+                    if (value < min) min = value;
+                }
+                
+                if (max === -Infinity || min === Infinity) continue;
+                
+                const yTop = centerY - (max * channelHeight / 2 * 0.9);
+                const yBottom = centerY - (min * channelHeight / 2 * 0.9);
+                
+                if (px === 0) {
+                    ctx.moveTo(x + px, yTop);
+                } else {
+                    ctx.lineTo(x + px, yTop);
+                }
+            }
+            
+            // 下側の波形（逆順）
+            for (let px = columnWidth - 1; px >= 0; px--) {
+                const sampleStart = px * samplesPerPixel;
+                const sampleEnd = Math.min(channelData.length, (px + 1) * samplesPerPixel);
+                
+                let min = Infinity;
+                for (let i = sampleStart; i < sampleEnd; i++) {
+                    const value = channelData[i];
+                    if (value < min) min = value;
+                }
+                
+                if (min === Infinity) continue;
+                
+                const yBottom = centerY - (min * channelHeight / 2 * 0.9);
+                ctx.lineTo(x + px, yBottom);
+            }
+            
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+    
+    /**
+     * 波形用のグリッドを描画
+     */
+    drawWaveformGrid(ctx, drawX, drawY, drawWidth, drawHeight, numChannels) {
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        
+        // 水平線（チャンネル境界）
+        for (let i = 0; i <= numChannels; i++) {
+            const y = drawY + (i / numChannels) * drawHeight;
+            ctx.beginPath();
+            ctx.moveTo(drawX, y);
+            ctx.lineTo(drawX + drawWidth, y);
+            ctx.stroke();
+        }
+        
+        // 垂直線（時間軸）
+        const timeLines = 10;
+        for (let i = 0; i <= timeLines; i++) {
+            const x = drawX + (i / timeLines) * drawWidth;
+            ctx.beginPath();
+            ctx.moveTo(x, drawY);
+            ctx.lineTo(x, drawY + drawHeight);
+            ctx.stroke();
+        }
+    }
+    
+    /**
      * 周波数をフォーマット（Hz, kHz）
      */
     formatFrequency(freq) {
@@ -560,6 +853,11 @@ class SpectrumAnalyzer {
             ctx.fillRect(0, 0, width, height);
             // ソノグラムデータもリセット
             this.resetSonogram();
+        } else if (this.mode === 'waveform') {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
+            // 波形データもリセット
+            this.resetWaveform();
         } else {
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, width, height);
@@ -570,6 +868,7 @@ class SpectrumAnalyzer {
         ctx.font = '16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('再生中にスペクトラムが表示されます', width / 2, height / 2);
+        const message = this.mode === 'waveform' ? '再生中に波形が表示されます' : '再生中にスペクトラムが表示されます';
+        ctx.fillText(message, width / 2, height / 2);
     }
 }

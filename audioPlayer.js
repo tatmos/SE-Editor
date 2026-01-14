@@ -241,6 +241,32 @@ class AudioPlayer {
             fftSize: this.masterAnalyser.fftSize
         };
     }
+    
+    /**
+     * 加工後の時系列データを取得（波形表示用）
+     * @returns {Array<Float32Array>} 各チャンネルの時系列データ
+     */
+    getTimeDomainData() {
+        if (!this.masterChannelAnalysers || this.masterChannelAnalysers.length === 0) {
+            return null;
+        }
+        
+        const channels = [];
+        for (let i = 0; i < this.masterChannelAnalysers.length; i++) {
+            const analyser = this.masterChannelAnalysers[i];
+            if (!analyser) {
+                channels.push(new Float32Array(0));
+                continue;
+            }
+            
+            const bufferLength = analyser.fftSize;
+            const dataArray = new Float32Array(bufferLength);
+            analyser.getFloatTimeDomainData(dataArray);
+            channels.push(dataArray);
+        }
+        
+        return channels;
+    }
 
     getLevel(trackNumber) {
         const analyser = trackNumber === 1 ? this.analyser1 : this.analyser2;
