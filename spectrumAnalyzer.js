@@ -14,9 +14,20 @@ class SpectrumAnalyzer {
         this.sonogramColumnIndex = 0; // 現在描画している列のインデックス
         this.sonogramMaxColumns = 0; // キャンバス幅に応じた最大列数
         
-        // ソノグラム更新頻度（フレームごと）
-        this.sonogramUpdateRate = 1; // デフォルトは毎フレーム
-        this.sonogramUpdateCounter = 0; // 更新カウンター
+        // パフォーマンス最適化用のオフスクリーンキャンバス
+        this.sonogramOffscreenCanvas = null;
+        this.sonogramOffscreenCtx = null;
+        
+        // 表示更新頻度（フレームごと）
+        // 1 = 毎フレーム、2 = 2フレームに1回、...
+        this.renderUpdateRate = 1;
+        this.renderUpdateCounter = 0;
+
+        // 周波数スケール（0:リニア, 1:ログ をブレンド）
+        // 3kHz が常に中央(50%)に来るようにピボット補正する
+        this.sonogramScaleLogBlend = 0.7; // 0.0 - 1.0
+        this.sonogramScalePivotHz = 3000;
+        this.sonogramMinFreqHz = 20;
         
         // キャンバスのサイズを調整
         this.resize();
@@ -50,14 +61,58 @@ class SpectrumAnalyzer {
         const slider = document.getElementById('sonogram-update-rate');
         const valueDisplay = document.getElementById('sonogram-update-rate-value');
         const control = document.getElementById('sonogram-update-control');
+        const scaleSlider = document.getElementById('sonogram-scale');
+        const scaleValue = document.getElementById('sonogram-scale-value');
         
         if (slider && valueDisplay) {
             slider.addEventListener('input', (e) => {
                 const value = parseInt(e.target.value);
-                this.sonogramUpdateRate = value;
+                this.renderUpdateRate = Math.max(1, value);
                 valueDisplay.textContent = value;
             });
         }
+
+        // 周波数スケール（%Log）
+        if (scaleSlider && scaleValue) {
+            scaleSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                const clamped = Math.max(0, Math.min(100, value));
+                this.sonogramScaleLogBlend = clamped / 100;
+                scaleValue.textContent = clamped;
+            });
+        }
+    }
+
+    /**
+     * 周波数(Hz)を 0..1 にマップ（リニア↔ログのブレンド + ピボット補正）
+     * - pivotHz が常に 0.5 に来るように、piecewise でリスケールする
+     */
+    freqToNorm(freqHz, sampleRate) {
+        const maxFreq = sampleRate / 2;
+        const minFreq = Math.max(1, this.sonogramMinFreqHz);
+        const pivot = Math.max(minFreq, Math.min(maxFreq, this.sonogramScalePivotHz));
+        const f = Math.max(minFreq, Math.min(maxFreq, freqHz));
+
+        const tLin = f / maxFreq;
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+        const tLog = (Math.log10(f) - logMin) / (logMax - logMin);
+
+        const a = this.sonogramScaleLogBlend; // 0..1
+        const t = (1 - a) * tLin + a * tLog;
+
+        const pivotLin = pivot / maxFreq;
+        const pivotLog = (Math.log10(pivot) - logMin) / (logMax - logMin);
+        const pivotT = (1 - a) * pivotLin + a * pivotLog;
+
+        // pivotT が 0 or 1 付近だと不安定なのでガード
+        const eps = 1e-6;
+        const p = Math.max(eps, Math.min(1 - eps, pivotT));
+
+        if (t <= p) {
+            return 0.5 * (t / p);
+        }
+        return 0.5 + 0.5 * ((t - p) / (1 - p));
     }
     
     setMode(mode) {
@@ -66,23 +121,14 @@ class SpectrumAnalyzer {
         // ボタンの状態を更新
         const spectrumBtn = document.getElementById('spectrum-mode-spectrum');
         const sonogramBtn = document.getElementById('spectrum-mode-sonogram');
-        const updateControl = document.getElementById('sonogram-update-control');
         
         if (spectrumBtn && sonogramBtn) {
             if (mode === 'spectrum') {
                 spectrumBtn.classList.add('active');
                 sonogramBtn.classList.remove('active');
-                // スペクトラムモードの時は更新頻度コントロールを非表示
-                if (updateControl) {
-                    updateControl.classList.add('hidden');
-                }
             } else {
                 spectrumBtn.classList.remove('active');
                 sonogramBtn.classList.add('active');
-                // ソノグラムモードの時は更新頻度コントロールを表示
-                if (updateControl) {
-                    updateControl.classList.remove('hidden');
-                }
             }
         }
         
@@ -90,18 +136,18 @@ class SpectrumAnalyzer {
         if (mode === 'sonogram') {
             this.resetSonogram();
         }
+
+        // モード切替時にカウンターもリセット（体感の不整合を防ぐ）
+        this.renderUpdateCounter = 0;
     }
     
     /**
-     * ソノグラムの更新が必要かどうかをチェック
-     * @returns {boolean} 更新が必要な場合true
+     * 表示の更新が必要かどうかをチェック（スペクトラム/ソノグラム共通）
      */
-    shouldUpdateSonogram() {
-        if (this.mode !== 'sonogram') return true; // スペクトラムモードは常に更新
-        
-        this.sonogramUpdateCounter++;
-        if (this.sonogramUpdateCounter >= this.sonogramUpdateRate) {
-            this.sonogramUpdateCounter = 0;
+    shouldUpdateRender() {
+        this.renderUpdateCounter++;
+        if (this.renderUpdateCounter >= this.renderUpdateRate) {
+            this.renderUpdateCounter = 0;
             return true;
         }
         return false;
@@ -111,11 +157,17 @@ class SpectrumAnalyzer {
         this.sonogramData = [];
         this.sonogramColumnIndex = 0;
         this.updateSonogramMaxColumns();
+        // オフスクリーンキャンバスもリセット
+        if (this.sonogramOffscreenCanvas && this.sonogramOffscreenCtx) {
+            this.sonogramOffscreenCtx.fillStyle = '#000000';
+            this.sonogramOffscreenCtx.fillRect(0, 0, this.sonogramOffscreenCanvas.width, this.sonogramOffscreenCanvas.height);
+        }
     }
     
     updateSonogramMaxColumns() {
-        // キャンバス幅に応じて最大列数を計算（1ピクセル = 1列）
-        this.sonogramMaxColumns = Math.floor(this.width);
+        // キャンバス幅に応じて最大列数を計算（時間軸の表示量を半分に）
+        // 1ピクセル = 1列ではなく、2ピクセル = 1列として表示量を減らす
+        this.sonogramMaxColumns = Math.max(1, Math.floor(this.width / 2));
     }
     
     resize() {
@@ -136,6 +188,11 @@ class SpectrumAnalyzer {
             // ソノグラムデータをリセット（幅が変わったため）
             if (this.mode === 'sonogram') {
                 this.resetSonogram();
+                // オフスクリーンキャンバスも再作成
+                if (this.sonogramOffscreenCanvas) {
+                    this.sonogramOffscreenCanvas.width = this.width;
+                    this.sonogramOffscreenCanvas.height = this.height;
+                }
             }
         }
     }
@@ -177,31 +234,33 @@ class SpectrumAnalyzer {
         // 周波数軸のラベルを描画
         this.drawFrequencyLabels(ctx, width, height, sampleRate, fftSize);
         
-        // スペクトラムを描画
-        const barWidth = width / frequencyData.length;
-        const maxFreq = sampleRate / 2; // ナイキスト周波数
-        
-        ctx.fillStyle = '#667eea';
-        ctx.strokeStyle = '#5568d3';
-        ctx.lineWidth = 1;
-        
+        // スペクトラムを描画（周波数スケール対応）
+        // 周波数ビン -> x へ非線形マップすると「複数ビンが同じx」に落ちるので、
+        // xごとに最大値を集約して描画（軽量）
+        const maxFreq = sampleRate / 2;
+        const w = Math.max(1, Math.floor(width));
+        const maxByX = new Uint8Array(w);
+
         for (let i = 0; i < frequencyData.length; i++) {
-            const value = frequencyData[i];
-            const barHeight = (value / 255) * height * 0.9; // 90%の高さまで使用
-            
-            const x = i * barWidth;
-            const y = height - barHeight;
-            
-            // バーを描画
-            ctx.fillRect(x, y, barWidth - 1, barHeight);
-            
-            // 上部に線を描画（より視覚的に）
-            if (barHeight > 2) {
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + barWidth - 1, y);
-                ctx.stroke();
+            const f0 = (i / frequencyData.length) * maxFreq;
+            const f1 = ((i + 1) / frequencyData.length) * maxFreq;
+            const x0 = Math.floor(this.freqToNorm(f0, sampleRate) * (w - 1));
+            const x1 = Math.floor(this.freqToNorm(f1, sampleRate) * (w - 1));
+            const v = frequencyData[i];
+
+            const xa = Math.max(0, Math.min(w - 1, Math.min(x0, x1)));
+            const xb = Math.max(0, Math.min(w - 1, Math.max(x0, x1)));
+            for (let x = xa; x <= xb; x++) {
+                if (v > maxByX[x]) maxByX[x] = v;
             }
+        }
+
+        ctx.fillStyle = '#667eea';
+        for (let x = 0; x < w; x++) {
+            const v = maxByX[x];
+            const barHeight = (v / 255) * height * 0.9;
+            const y = height - barHeight;
+            ctx.fillRect(x, y, 1, barHeight);
         }
         
         // 対数スケールでより見やすくする（オプション）
@@ -229,85 +288,78 @@ class SpectrumAnalyzer {
         this.sonogramData[colIndex] = columnData;
         this.sonogramColumnIndex++;
         
-        // 背景をクリア
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, width, height);
-        
-        // ソノグラムを描画（対数スケール）
-        const columnWidth = width / this.sonogramMaxColumns;
-        
-        // 対数スケール用のパラメータ
-        const minFreq = 20; // 最小周波数（Hz）
-        const maxFreq = sampleRate / 2; // 最大周波数（ナイキスト周波数）
-        const logMin = Math.log10(minFreq);
-        const logMax = Math.log10(maxFreq);
-        const logRange = logMax - logMin;
-        
-        // 左から右へ描画
-        // まだ右端まで埋まっていない場合は、埋まっている分だけ描画
-        // 右端まで埋まった場合は、全列を描画（左から上書き）
-        const isFilled = this.sonogramColumnIndex >= this.sonogramMaxColumns;
-        const numColumnsToDraw = isFilled ? this.sonogramMaxColumns : this.sonogramColumnIndex;
-        
-        for (let displayCol = 0; displayCol < numColumnsToDraw; displayCol++) {
-            // データのインデックスを計算
-            let dataIndex;
-            if (isFilled) {
-                // 右端まで埋まった場合：左から上書き
-                // 最新のデータは (sonogramColumnIndex - 1) % sonogramMaxColumns
-                // 左端（displayCol=0）が最新のデータから数えて何番目か
-                const offset = displayCol;
-                dataIndex = (this.sonogramColumnIndex - 1 - offset + this.sonogramMaxColumns) % this.sonogramMaxColumns;
-            } else {
-                // まだ右端まで埋まっていない場合：左から順に
-                dataIndex = displayCol;
-            }
-            
-            const columnData = this.sonogramData[dataIndex];
-            if (!columnData) continue;
-            
-            const x = displayCol * columnWidth;
-            
-            // 対数スケールで周波数ビンをマッピング
-            // 各周波数ビンの境界を計算して描画（下から上へ、低周波数から高周波数へ）
-            let currentY = height; // 現在の描画位置（下から上へ）
-            
-            for (let freqBin = 0; freqBin < columnData.length; freqBin++) {
-                const value = columnData[freqBin];
-                
-                // 周波数ビンの下限と上限を計算（線形）
-                const binStartFreq = (freqBin / columnData.length) * maxFreq;
-                const binEndFreq = ((freqBin + 1) / columnData.length) * maxFreq;
-                
-                // 最小周波数未満のビンはスキップ
-                if (binEndFreq < minFreq) continue;
-                
-                // ビンの境界を対数スケールでY座標に変換
-                const binStartLog = Math.log10(Math.max(minFreq, binStartFreq));
-                const binEndLog = Math.log10(binEndFreq);
-                
-                const normalizedStartLog = (binStartLog - logMin) / logRange;
-                const normalizedEndLog = (binEndLog - logMin) / logRange;
-                
-                const yBottom = height - normalizedStartLog * height; // ビンの下端（低周波数側）
-                const yTop = height - normalizedEndLog * height;      // ビンの上端（高周波数側）
-                
-                // ビンの高さを計算
-                const binHeight = yBottom - yTop;
-                
-                if (binHeight > 0 && yTop >= 0 && yBottom <= height) {
-                    // カラーマップを適用（黒→青→オレンジ→黄色→白）
-                    const color = this.valueToColor(value);
-                    
-                    ctx.fillStyle = color;
-                    // 下から上へ連続的に描画
-                    ctx.fillRect(x, yTop, columnWidth, binHeight);
-                }
-            }
+        // オフスクリーンキャンバスを使用してパフォーマンスを向上
+        if (!this.sonogramOffscreenCanvas) {
+            this.sonogramOffscreenCanvas = document.createElement('canvas');
+            this.sonogramOffscreenCanvas.width = width;
+            this.sonogramOffscreenCanvas.height = height;
+            this.sonogramOffscreenCtx = this.sonogramOffscreenCanvas.getContext('2d');
+            // 初期クリア
+            this.sonogramOffscreenCtx.fillStyle = '#000000';
+            this.sonogramOffscreenCtx.fillRect(0, 0, width, height);
         }
+
+        // リサイズ等でサイズがずれていたら合わせる
+        if (this.sonogramOffscreenCanvas.width !== width || this.sonogramOffscreenCanvas.height !== height) {
+            this.sonogramOffscreenCanvas.width = width;
+            this.sonogramOffscreenCanvas.height = height;
+            this.sonogramOffscreenCtx.fillStyle = '#000000';
+            this.sonogramOffscreenCtx.fillRect(0, 0, width, height);
+        }
+        
+        const offscreenCtx = this.sonogramOffscreenCtx;
+
+        // 仕様どおり「左から上書き」: 上書き対象の列だけ消して描き直す
+        const columnWidth = width / this.sonogramMaxColumns;
+        const x = colIndex * columnWidth;
+        offscreenCtx.fillStyle = '#000000';
+        offscreenCtx.fillRect(x, 0, Math.ceil(columnWidth), height);
+        this.drawSonogramColumn(offscreenCtx, columnData, colIndex, width, height, sampleRate, fftSize);
+        
+        // オフスクリーンキャンバスをメインキャンバスにコピー
+        ctx.drawImage(this.sonogramOffscreenCanvas, 0, 0);
         
         // 周波数軸のラベルを描画（簡易版）
         this.drawSonogramLabels(ctx, width, height, sampleRate, fftSize);
+    }
+    
+    /**
+     * ソノグラムの1列を描画（最適化版）
+     */
+    drawSonogramColumn(ctx, columnData, colIndex, width, height, sampleRate, fftSize) {
+        const columnWidth = width / this.sonogramMaxColumns;
+        const x = colIndex * columnWidth;
+
+        const maxFreq = sampleRate / 2;
+        const minFreq = this.sonogramMinFreqHz;
+
+        // 周波数ビン境界を「ブレンドスケール + 3kHzピボット中央」へマップして描画
+        for (let freqBin = 0; freqBin < columnData.length; freqBin++) {
+            const value = columnData[freqBin];
+            
+            // 周波数ビンの下限と上限を計算（線形）
+            const binStartFreq = (freqBin / columnData.length) * maxFreq;
+            const binEndFreq = ((freqBin + 1) / columnData.length) * maxFreq;
+            
+            // 最小周波数未満のビンはスキップ
+            if (binEndFreq < minFreq) continue;
+
+            const n0 = this.freqToNorm(Math.max(minFreq, binStartFreq), sampleRate);
+            const n1 = this.freqToNorm(Math.max(minFreq, binEndFreq), sampleRate);
+            const yBottom = height - n0 * height; // 低周波側
+            const yTop = height - n1 * height;    // 高周波側
+            
+            // ビンの高さを計算
+            const binHeight = yBottom - yTop;
+            
+            if (binHeight > 0 && yTop >= 0 && yBottom <= height) {
+                // カラーマップを適用（黒→青→オレンジ→黄色→白）
+                const color = this.valueToColor(value);
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(x, yTop, columnWidth, binHeight);
+            }
+        }
     }
     
     /**
@@ -363,19 +415,13 @@ class SpectrumAnalyzer {
             3000, 2500, 2000, 1500, 1200, 1000, 700, 500, 300, 200, 100
         ];
         const maxFreq = sampleRate / 2;
-        
-        // 対数スケール用のパラメータ
-        const minFreq = 20; // 最小周波数（Hz）
-        const logMin = Math.log10(minFreq);
-        const logMax = Math.log10(maxFreq);
-        const logRange = logMax - logMin;
+        const minFreq = this.sonogramMinFreqHz;
         
         freqLabels.forEach(freq => {
             if (freq >= minFreq && freq <= maxFreq) {
-                // 対数スケールでY座標を計算
-                const logFreq = Math.log10(freq);
-                const normalizedLog = (logFreq - logMin) / logRange;
-                const y = height - normalizedLog * height;
+                // ブレンドスケール + ピボット補正でY座標を計算
+                const n = this.freqToNorm(freq, sampleRate);
+                const y = height - n * height;
                 
                 if (y >= 0 && y <= height) {
                     ctx.fillText(this.formatFrequency(freq), 5, y);
@@ -431,9 +477,8 @@ class SpectrumAnalyzer {
         
         freqLabels.forEach(freq => {
             if (freq <= maxFreq) {
-                // 周波数を配列インデックスに変換（線形スケール）
-                const index = (freq / maxFreq) * (fftSize / 2);
-                const x = (index / (fftSize / 2)) * width;
+                // 周波数スケール（リニア↔ログのブレンド + ピボット補正）でx座標へ
+                const x = this.freqToNorm(freq, sampleRate) * width;
                 
                 if (x >= 0 && x <= width) {
                     ctx.fillText(this.formatFrequency(freq), x, height - 20);

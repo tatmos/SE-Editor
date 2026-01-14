@@ -244,11 +244,15 @@
             </div>
             <div class="spectrum-controls">
                 <canvas id="spectrum-canvas" class="spectrum-canvas"></canvas>
-                <div class="sonogram-update-control hidden" id="sonogram-update-control">
+                <div class="sonogram-update-control" id="sonogram-update-control">
                     <label for="sonogram-update-rate">更新頻度:</label>
                     <input type="range" id="sonogram-update-rate" class="slider" min="1" max="10" value="1" step="1">
                     <span id="sonogram-update-rate-value">1</span>
                     <span>フレームごと</span>
+                    <label for="sonogram-scale" style="margin-left:12px;">周波数スケール:</label>
+                    <input type="range" id="sonogram-scale" class="slider" min="0" max="100" value="70" step="1">
+                    <span id="sonogram-scale-value">70</span>
+                    <span>%Log</span>
                 </div>
             </div>
         </div>
