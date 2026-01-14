@@ -29,6 +29,12 @@ class SpectrumAnalyzer {
         this.sonogramScalePivotHz = 3000;
         this.sonogramMinFreqHz = 20;
         
+        // 描画領域のマージン（ラベル用のスペース）
+        this.marginLeft = 60;   // 左側の周波数ラベル用
+        this.marginRight = 50;  // 右側のdBラベル用
+        this.marginBottom = 20; // 下側の周波数ラベル用
+        this.marginTop = 5;     // 上側のマージン
+        
         // キャンバスのサイズを調整
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -166,8 +172,10 @@ class SpectrumAnalyzer {
     
     updateSonogramMaxColumns() {
         // キャンバス幅に応じて最大列数を計算（時間軸の表示量を半分に）
+        // 描画領域の幅を使用（マージンを除く）
+        const drawWidth = this.width - this.marginLeft - this.marginRight;
         // 1ピクセル = 1列ではなく、2ピクセル = 1列として表示量を減らす
-        this.sonogramMaxColumns = Math.max(1, Math.floor(this.width / 2));
+        this.sonogramMaxColumns = Math.max(1, Math.floor(drawWidth / 2));
     }
     
     resize() {
@@ -188,10 +196,12 @@ class SpectrumAnalyzer {
             // ソノグラムデータをリセット（幅が変わったため）
             if (this.mode === 'sonogram') {
                 this.resetSonogram();
-                // オフスクリーンキャンバスも再作成
+                // オフスクリーンキャンバスも再作成（描画領域のサイズ）
                 if (this.sonogramOffscreenCanvas) {
-                    this.sonogramOffscreenCanvas.width = this.width;
-                    this.sonogramOffscreenCanvas.height = this.height;
+                    const drawWidth = this.width - this.marginLeft - this.marginRight;
+                    const drawHeight = this.height - this.marginTop - this.marginBottom;
+                    this.sonogramOffscreenCanvas.width = drawWidth;
+                    this.sonogramOffscreenCanvas.height = drawHeight;
                 }
             }
         }
@@ -224,21 +234,27 @@ class SpectrumAnalyzer {
         const width = this.width;
         const height = this.height;
         
+        // 描画領域（マージンを除いた領域）
+        const drawX = this.marginLeft;
+        const drawY = this.marginTop;
+        const drawWidth = width - this.marginLeft - this.marginRight;
+        const drawHeight = height - this.marginTop - this.marginBottom;
+        
         // 背景をクリア
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(0, 0, width, height);
         
-        // グリッドを描画
-        this.drawGrid(ctx, width, height);
+        // グリッドを描画（描画領域内）
+        this.drawGrid(ctx, drawX, drawY, drawWidth, drawHeight);
         
-        // 周波数軸のラベルを描画
-        this.drawFrequencyLabels(ctx, width, height, sampleRate, fftSize);
+        // 周波数軸のラベルを描画（描画領域の外側）
+        this.drawFrequencyLabels(ctx, width, height, drawX, drawY, drawWidth, drawHeight, sampleRate, fftSize);
         
-        // スペクトラムを描画（周波数スケール対応）
+        // スペクトラムを描画（周波数スケール対応、描画領域内）
         // 周波数ビン -> x へ非線形マップすると「複数ビンが同じx」に落ちるので、
         // xごとに最大値を集約して描画（軽量）
         const maxFreq = sampleRate / 2;
-        const w = Math.max(1, Math.floor(width));
+        const w = Math.max(1, Math.floor(drawWidth));
         const maxByX = new Uint8Array(w);
 
         for (let i = 0; i < frequencyData.length; i++) {
@@ -258,14 +274,14 @@ class SpectrumAnalyzer {
         ctx.fillStyle = '#667eea';
         for (let x = 0; x < w; x++) {
             const v = maxByX[x];
-            const barHeight = (v / 255) * height * 0.9;
-            const y = height - barHeight;
-            ctx.fillRect(x, y, 1, barHeight);
+            const barHeight = (v / 255) * drawHeight * 0.9;
+            const y = drawY + drawHeight - barHeight;
+            ctx.fillRect(drawX + x, y, 1, barHeight);
         }
         
         // 対数スケールでより見やすくする（オプション）
         // 低周波数域を強調表示
-        this.drawLogScale(ctx, frequencyData, width, height, sampleRate, fftSize);
+        // this.drawLogScale(ctx, frequencyData, drawX, drawY, drawWidth, drawHeight, sampleRate, fftSize);
     }
     
     /**
@@ -275,6 +291,12 @@ class SpectrumAnalyzer {
         const ctx = this.ctx;
         const width = this.width;
         const height = this.height;
+        
+        // 描画領域（マージンを除いた領域）
+        const drawX = this.marginLeft;
+        const drawY = this.marginTop;
+        const drawWidth = width - this.marginLeft - this.marginRight;
+        const drawHeight = height - this.marginTop - this.marginBottom;
         
         // 現在の周波数データをバッファに追加
         const columnData = new Uint8Array(frequencyData.length);
@@ -291,43 +313,47 @@ class SpectrumAnalyzer {
         // オフスクリーンキャンバスを使用してパフォーマンスを向上
         if (!this.sonogramOffscreenCanvas) {
             this.sonogramOffscreenCanvas = document.createElement('canvas');
-            this.sonogramOffscreenCanvas.width = width;
-            this.sonogramOffscreenCanvas.height = height;
+            this.sonogramOffscreenCanvas.width = drawWidth;
+            this.sonogramOffscreenCanvas.height = drawHeight;
             this.sonogramOffscreenCtx = this.sonogramOffscreenCanvas.getContext('2d');
             // 初期クリア
             this.sonogramOffscreenCtx.fillStyle = '#000000';
-            this.sonogramOffscreenCtx.fillRect(0, 0, width, height);
+            this.sonogramOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
         }
 
         // リサイズ等でサイズがずれていたら合わせる
-        if (this.sonogramOffscreenCanvas.width !== width || this.sonogramOffscreenCanvas.height !== height) {
-            this.sonogramOffscreenCanvas.width = width;
-            this.sonogramOffscreenCanvas.height = height;
+        if (this.sonogramOffscreenCanvas.width !== drawWidth || this.sonogramOffscreenCanvas.height !== drawHeight) {
+            this.sonogramOffscreenCanvas.width = drawWidth;
+            this.sonogramOffscreenCanvas.height = drawHeight;
             this.sonogramOffscreenCtx.fillStyle = '#000000';
-            this.sonogramOffscreenCtx.fillRect(0, 0, width, height);
+            this.sonogramOffscreenCtx.fillRect(0, 0, drawWidth, drawHeight);
         }
         
         const offscreenCtx = this.sonogramOffscreenCtx;
 
         // 仕様どおり「左から上書き」: 上書き対象の列だけ消して描き直す
-        const columnWidth = width / this.sonogramMaxColumns;
+        const columnWidth = drawWidth / this.sonogramMaxColumns;
         const x = colIndex * columnWidth;
         offscreenCtx.fillStyle = '#000000';
-        offscreenCtx.fillRect(x, 0, Math.ceil(columnWidth), height);
-        this.drawSonogramColumn(offscreenCtx, columnData, colIndex, width, height, sampleRate, fftSize);
+        offscreenCtx.fillRect(x, 0, Math.ceil(columnWidth), drawHeight);
+        this.drawSonogramColumn(offscreenCtx, columnData, colIndex, drawWidth, drawHeight, sampleRate, fftSize);
         
-        // オフスクリーンキャンバスをメインキャンバスにコピー
-        ctx.drawImage(this.sonogramOffscreenCanvas, 0, 0);
+        // 背景をクリア
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, width, height);
         
-        // 周波数軸のラベルを描画（簡易版）
-        this.drawSonogramLabels(ctx, width, height, sampleRate, fftSize);
+        // オフスクリーンキャンバスをメインキャンバスにコピー（描画領域内）
+        ctx.drawImage(this.sonogramOffscreenCanvas, drawX, drawY);
+        
+        // 周波数軸のラベルを描画（描画領域の外側）
+        this.drawSonogramLabels(ctx, width, height, drawX, drawY, drawWidth, drawHeight, sampleRate, fftSize);
     }
     
     /**
      * ソノグラムの1列を描画（最適化版）
      */
-    drawSonogramColumn(ctx, columnData, colIndex, width, height, sampleRate, fftSize) {
-        const columnWidth = width / this.sonogramMaxColumns;
+    drawSonogramColumn(ctx, columnData, colIndex, drawWidth, drawHeight, sampleRate, fftSize) {
+        const columnWidth = drawWidth / this.sonogramMaxColumns;
         const x = colIndex * columnWidth;
 
         const maxFreq = sampleRate / 2;
@@ -346,13 +372,13 @@ class SpectrumAnalyzer {
 
             const n0 = this.freqToNorm(Math.max(minFreq, binStartFreq), sampleRate);
             const n1 = this.freqToNorm(Math.max(minFreq, binEndFreq), sampleRate);
-            const yBottom = height - n0 * height; // 低周波側
-            const yTop = height - n1 * height;    // 高周波側
+            const yBottom = drawHeight - n0 * drawHeight; // 低周波側
+            const yTop = drawHeight - n1 * drawHeight;    // 高周波側
             
             // ビンの高さを計算
             const binHeight = yBottom - yTop;
             
-            if (binHeight > 0 && yTop >= 0 && yBottom <= height) {
+            if (binHeight > 0 && yTop >= 0 && yBottom <= drawHeight) {
                 // カラーマップを適用（黒→青→オレンジ→黄色→白）
                 const color = this.valueToColor(value);
                 
@@ -403,13 +429,13 @@ class SpectrumAnalyzer {
     /**
      * ソノグラム用のラベルを描画（対数スケール）
      */
-    drawSonogramLabels(ctx, width, height, sampleRate, fftSize) {
+    drawSonogramLabels(ctx, width, height, drawX, drawY, drawWidth, drawHeight, sampleRate, fftSize) {
         ctx.fillStyle = '#999';
         ctx.font = '11px monospace';
-        ctx.textAlign = 'left';
+        ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         
-        // 周波数ラベル（左側）- 画像のように詳細なラベル
+        // 周波数ラベル（左側）- 画像のように詳細なラベル（描画領域の外側）
         const freqLabels = [
             20000, 15000, 12000, 10000, 8000, 7000, 6000, 5000, 4000, 3500,
             3000, 2500, 2000, 1500, 1200, 1000, 700, 500, 300, 200, 100
@@ -421,43 +447,44 @@ class SpectrumAnalyzer {
             if (freq >= minFreq && freq <= maxFreq) {
                 // ブレンドスケール + ピボット補正でY座標を計算
                 const n = this.freqToNorm(freq, sampleRate);
-                const y = height - n * height;
+                const y = drawY + drawHeight - n * drawHeight;
                 
-                if (y >= 0 && y <= height) {
-                    ctx.fillText(this.formatFrequency(freq), 5, y);
+                if (y >= drawY && y <= drawY + drawHeight) {
+                    ctx.fillText(this.formatFrequency(freq), drawX - 5, y);
                 }
             }
         });
         
-        // 単位ラベル（最下部）
+        // 単位ラベル（最下部、左側）
         ctx.textBaseline = 'bottom';
-        ctx.fillText('Hz', 5, height - 2);
+        ctx.textAlign = 'right';
+        ctx.fillText('Hz', drawX - 5, drawY + drawHeight + 3);
     }
     
     /**
      * グリッドを描画
      */
-    drawGrid(ctx, width, height) {
+    drawGrid(ctx, drawX, drawY, drawWidth, drawHeight) {
         ctx.strokeStyle = '#333';
         ctx.lineWidth = 1;
         
         // 水平線（dBレベル）
         const dbLevels = [0, -6, -12, -18, -24, -30, -36, -42, -48, -54, -60];
         dbLevels.forEach((db, index) => {
-            const y = (index / (dbLevels.length - 1)) * height * 0.9;
+            const y = drawY + (index / (dbLevels.length - 1)) * drawHeight * 0.9;
             ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
+            ctx.moveTo(drawX, y);
+            ctx.lineTo(drawX + drawWidth, y);
             ctx.stroke();
         });
         
         // 垂直線（周波数）
         const freqLines = 10;
         for (let i = 0; i <= freqLines; i++) {
-            const x = (i / freqLines) * width;
+            const x = drawX + (i / freqLines) * drawWidth;
             ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, height);
+            ctx.moveTo(x, drawY);
+            ctx.lineTo(x, drawY + drawHeight);
             ctx.stroke();
         }
     }
@@ -465,41 +492,41 @@ class SpectrumAnalyzer {
     /**
      * 周波数ラベルを描画
      */
-    drawFrequencyLabels(ctx, width, height, sampleRate, fftSize) {
+    drawFrequencyLabels(ctx, width, height, drawX, drawY, drawWidth, drawHeight, sampleRate, fftSize) {
         ctx.fillStyle = '#999';
         ctx.font = '11px monospace';
+        
+        // 周波数ラベル（Hz）- 下側に描画（描画領域の外側）
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        
-        // 周波数ラベル（Hz）
         const freqLabels = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
         const maxFreq = sampleRate / 2;
         
         freqLabels.forEach(freq => {
             if (freq <= maxFreq) {
                 // 周波数スケール（リニア↔ログのブレンド + ピボット補正）でx座標へ
-                const x = this.freqToNorm(freq, sampleRate) * width;
+                const x = drawX + this.freqToNorm(freq, sampleRate) * drawWidth;
                 
-                if (x >= 0 && x <= width) {
-                    ctx.fillText(this.formatFrequency(freq), x, height - 20);
+                if (x >= drawX && x <= drawX + drawWidth) {
+                    ctx.fillText(this.formatFrequency(freq), x, drawY + drawHeight + 3);
                 }
             }
         });
         
-        // dBレベルラベル
-        ctx.textAlign = 'right';
+        // dBレベルラベル - 右側に描画（描画領域の外側）
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         const dbLevels = [0, -12, -24, -36, -48, -60];
         dbLevels.forEach((db, index) => {
-            const y = (index / (dbLevels.length - 1)) * height * 0.9;
-            ctx.fillText(db + 'dB', width - 5, y);
+            const y = drawY + (index / (dbLevels.length - 1)) * drawHeight * 0.9;
+            ctx.fillText(db + 'dB', drawX + drawWidth + 5, y);
         });
     }
     
     /**
      * 対数スケールでスペクトラムを描画（低周波数域を強調）
      */
-    drawLogScale(ctx, frequencyData, width, height, sampleRate, fftSize) {
+    drawLogScale(ctx, frequencyData, drawX, drawY, drawWidth, drawHeight, sampleRate, fftSize) {
         // 対数スケール用のオーバーレイ（オプション）
         // ここでは実装を簡略化
     }

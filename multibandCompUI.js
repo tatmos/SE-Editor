@@ -2,15 +2,36 @@
 class MultiBandCompUI {
     constructor(audioProcessor) {
         this.audioProcessor = audioProcessor;
+        
+        // HTMLのスライダーから初期値を読み取る
+        const getSliderValue = (id, defaultValue) => {
+            const element = document.getElementById(id);
+            return element ? parseFloat(element.value) : defaultValue;
+        };
+        
         this.params = {
-            low:  { up: 0, down: 0, gain: 100 },
-            mid:  { up: 0, down: 0, gain: 100 },
-            high: { up: 0, down: 0, gain: 100 },
-            mix: 100
+            low:  { 
+                up: getSliderValue('comp-l-up', 0),
+                down: getSliderValue('comp-l-down', 0),
+                gain: getSliderValue('comp-l-gain', 100)
+            },
+            mid:  { 
+                up: getSliderValue('comp-m-up', 0),
+                down: getSliderValue('comp-m-down', 0),
+                gain: getSliderValue('comp-m-gain', 100)
+            },
+            high: { 
+                up: getSliderValue('comp-h-up', 0),
+                down: getSliderValue('comp-h-down', 0),
+                gain: getSliderValue('comp-h-gain', 100)
+            },
+            mix: getSliderValue('comp-mix', 100)
         };
         
         this.setupEventListeners();
         this.updateDisplay();
+        // 初期化時にプロセッサーに値を反映
+        this.updateProcessor();
     }
     
     setupEventListeners() {
