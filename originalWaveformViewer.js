@@ -232,11 +232,13 @@ class OriginalWaveformViewer {
             ctx.fillRect(endX, 0, width - endX, height);
         }
         
-        // DCオフセットライン
+        // DCオフセットライン（最適化：大きな波形の場合は間引いて計算）
         for (let channel = 0; channel < numChannels; channel++) {
             const channelData = this.audioBuffer.getChannelData(channel);
             const yOffset = channel * trackHeight;
-            const dcOffset = this.calculateDCOffset(channelData, 0, channelData.length);
+            // 大きな波形の場合は間引いて計算（最大1000サンプルまで）
+            const dcSampleStep = Math.max(1, Math.floor(channelData.length / 1000));
+            const dcOffset = this.calculateDCOffset(channelData, 0, channelData.length, dcSampleStep);
             const dcY = yOffset + (trackHeight / 2) - (dcOffset * trackHeight / 2 * 0.9);
             ctx.strokeStyle = '#006400';
             ctx.lineWidth = 1;
@@ -263,14 +265,20 @@ class OriginalWaveformViewer {
             let firstPointTop = true;
             let firstPointBottom = true;
             
+            // 波形を描画（上側と下側を一度に計算して効率化）
+            const points = [];
             for (let x = 0; x < width; x++) {
                 const timeAtX = (x / timeScale);
                 const pixelStartSample = Math.floor(timeAtX * sampleRate);
                 if (pixelStartSample < 0 || pixelStartSample >= channelData.length) continue;
                 
+                // 最大値と最小値を計算（最適化：大きな波形の場合は間引く）
                 let max = -Infinity;
                 let min = Infinity;
-                for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= 0; i++) {
+                const actualSamplesPerPixel = Math.min(samplesPerPixel, channelData.length - pixelStartSample);
+                // サンプル数が多い場合は間引いて計算（最大100サンプルまで）
+                const sampleStep = actualSamplesPerPixel > 100 ? Math.ceil(actualSamplesPerPixel / 100) : 1;
+                for (let i = 0; i < actualSamplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= 0; i += sampleStep) {
                     const value = channelData[pixelStartSample + i];
                     if (value > max) max = value;
                     if (value < min) min = value;
@@ -278,36 +286,20 @@ class OriginalWaveformViewer {
                 
                 const yTop = centerY - (max * trackHeight / 2 * 0.9);
                 const yBottom = centerY - (min * trackHeight / 2 * 0.9);
-                
-                if (firstPointTop) {
-                    ctx.moveTo(x, yTop);
-                    firstPointTop = false;
-                } else {
-                    ctx.lineTo(x, yTop);
+                points.push({ x, yTop, yBottom });
+            }
+            
+            // 上側の波形を描画
+            if (points.length > 0) {
+                ctx.moveTo(points[0].x, points[0].yTop);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].yTop);
                 }
             }
             
-            for (let x = width - 1; x >= 0; x--) {
-                const timeAtX = (x / timeScale);
-                const pixelStartSample = Math.floor(timeAtX * sampleRate);
-                if (pixelStartSample < 0 || pixelStartSample >= channelData.length) continue;
-                
-                let max = -Infinity;
-                let min = Infinity;
-                for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= 0; i++) {
-                    const value = channelData[pixelStartSample + i];
-                    if (value > max) max = value;
-                    if (value < min) min = value;
-                }
-                
-                const yBottom = centerY - (min * trackHeight / 2 * 0.9);
-                
-                if (firstPointBottom) {
-                    ctx.lineTo(x, yBottom);
-                    firstPointBottom = false;
-                } else {
-                    ctx.lineTo(x, yBottom);
-                }
+            // 下側の波形を描画（逆順）
+            for (let i = points.length - 1; i >= 0; i--) {
+                ctx.lineTo(points[i].x, points[i].yBottom);
             }
             
             ctx.closePath();
@@ -358,14 +350,19 @@ class OriginalWaveformViewer {
         const timeScale = rulerWidth / duration;
         const tickInterval = this.calculateTickInterval(duration, rulerWidth);
         
+        // 最適化：DocumentFragmentを使用してDOM操作を効率化
+        const fragment = document.createDocumentFragment();
+        
         for (let time = 0; time <= duration; time += tickInterval) {
             const x = time * timeScale;
             const tick = document.createElement('div');
             tick.className = 'ruler-tick';
             tick.style.left = x + 'px';
             tick.textContent = this.formatTime(time);
-            this.ruler.appendChild(tick);
+            fragment.appendChild(tick);
         }
+        
+        this.ruler.appendChild(fragment);
     }
 
     calculateTickInterval(duration, width) {
@@ -397,10 +394,10 @@ class OriginalWaveformViewer {
         return mins > 0 ? `${mins}:${secs.padStart(5, '0')}` : `${secs}s`;
     }
 
-    calculateDCOffset(channelData, startSample, endSample) {
+    calculateDCOffset(channelData, startSample, endSample, sampleStep = 1) {
         let sum = 0;
         let count = 0;
-        for (let i = startSample; i < endSample && i < channelData.length; i++) {
+        for (let i = startSample; i < endSample && i < channelData.length; i += sampleStep) {
             sum += channelData[i];
             count++;
         }

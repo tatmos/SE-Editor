@@ -45,10 +45,12 @@ class WaveformDrawer {
                 const channelData = audioBuffer.getChannelData(channel);
                 const yOffset = channel * trackHeight;
 
-                // DCオフセット（平均値）を計算
+                // DCオフセット（平均値）を計算（最適化：サンプリング間隔を大きくして計算量を削減）
                 let sum = 0;
                 let count = 0;
-                for (let i = waveformStartSample; i < waveformEndSample && i < channelData.length; i++) {
+                // 大きな波形の場合は間引いて計算（最大1000サンプルまで）
+                const dcSampleStep = Math.max(1, Math.floor((waveformEndSample - waveformStartSample) / 1000));
+                for (let i = waveformStartSample; i < waveformEndSample && i < channelData.length; i += dcSampleStep) {
                     sum += channelData[i];
                     count++;
                 }
@@ -92,7 +94,8 @@ class WaveformDrawer {
                 let firstPointTop = true;
                 let firstPointBottom = true;
 
-                // 上側の波形
+                // 波形を描画（上側と下側を一度に計算して効率化）
+                const points = [];
                 for (let x = drawStartX; x < drawEndX; x++) {
                     const timeInDisplay = displayStartTime + (x / timeScale);
                     const timeInWaveform = timeInDisplay - waveformStartTime;
@@ -100,53 +103,34 @@ class WaveformDrawer {
                     
                     if (pixelStartSample < waveformStartSample || pixelStartSample >= waveformEndSample) continue;
 
-                    // 最大値と最小値を計算
+                    // 最大値と最小値を計算（最適化：大きな波形の場合は間引く）
                     let max = -Infinity;
                     let min = Infinity;
-                    for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample; i++) {
+                    const actualSamplesPerPixel = Math.min(samplesPerPixel, channelData.length - pixelStartSample);
+                    // サンプル数が多い場合は間引いて計算（最大100サンプルまで）
+                    const sampleStep = actualSamplesPerPixel > 100 ? Math.ceil(actualSamplesPerPixel / 100) : 1;
+                    for (let i = 0; i < actualSamplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample; i += sampleStep) {
                         const value = channelData[pixelStartSample + i];
                         if (value > max) max = value;
                         if (value < min) min = value;
                     }
 
-                    const scaledMax = max;
-                    const scaledMin = min;
-                    const yTop = centerY - (scaledMax * trackHeight / 2 * 0.9);
-                    const yBottom = centerY - (scaledMin * trackHeight / 2 * 0.9);
+                    const yTop = centerY - (max * trackHeight / 2 * 0.9);
+                    const yBottom = centerY - (min * trackHeight / 2 * 0.9);
+                    points.push({ x, yTop, yBottom });
+                }
 
-                    if (firstPointTop) {
-                        ctx.moveTo(x, yTop);
-                        firstPointTop = false;
-                    } else {
-                        ctx.lineTo(x, yTop);
+                // 上側の波形を描画
+                if (points.length > 0) {
+                    ctx.moveTo(points[0].x, points[0].yTop);
+                    for (let i = 1; i < points.length; i++) {
+                        ctx.lineTo(points[i].x, points[i].yTop);
                     }
                 }
 
-                // 下側の波形（逆順に描画）
-                for (let x = drawEndX - 1; x >= drawStartX; x--) {
-                    const timeInDisplay = displayStartTime + (x / timeScale);
-                    const timeInWaveform = timeInDisplay - waveformStartTime;
-                    const pixelStartSample = Math.floor((waveformStartTime + timeInWaveform) * sampleRate);
-                    
-                    if (pixelStartSample < waveformStartSample || pixelStartSample >= waveformEndSample) continue;
-
-                    let max = -Infinity;
-                    let min = Infinity;
-                    for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample; i++) {
-                        const value = channelData[pixelStartSample + i];
-                        if (value > max) max = value;
-                        if (value < min) min = value;
-                    }
-
-                    const scaledMin = min;
-                    const yBottom = centerY - (scaledMin * trackHeight / 2 * 0.9);
-
-                    if (firstPointBottom) {
-                        ctx.lineTo(x, yBottom);
-                        firstPointBottom = false;
-                    } else {
-                        ctx.lineTo(x, yBottom);
-                    }
+                // 下側の波形を描画（逆順）
+                for (let i = points.length - 1; i >= 0; i--) {
+                    ctx.lineTo(points[i].x, points[i].yBottom);
                 }
 
                 ctx.closePath();

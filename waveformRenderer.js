@@ -150,6 +150,10 @@ class WaveformRenderer {
         const timeScale2 = ruler2Width / totalDuration;
         const numTicks = Math.floor(totalDuration / tickInterval) + 1;
 
+        // 最適化：DocumentFragmentを使用してDOM操作を効率化
+        const fragment1 = document.createDocumentFragment();
+        const fragment2 = document.createDocumentFragment();
+
         for (let i = 0; i < numTicks; i++) {
             const time = i * tickInterval;
             if (time > totalDuration) break;
@@ -165,7 +169,7 @@ class WaveformRenderer {
             tick1.style.width = '1px';
             tick1.style.height = '100%';
             tick1.style.background = '#adb5bd';
-            ruler1.appendChild(tick1);
+            fragment1.appendChild(tick1);
 
             const tick2 = document.createElement('div');
             tick2.style.position = 'absolute';
@@ -174,7 +178,7 @@ class WaveformRenderer {
             tick2.style.width = '1px';
             tick2.style.height = '100%';
             tick2.style.background = '#adb5bd';
-            ruler2.appendChild(tick2);
+            fragment2.appendChild(tick2);
 
             // 時間ラベル
             const label1 = document.createElement('div');
@@ -184,7 +188,7 @@ class WaveformRenderer {
             label1.style.fontSize = '11px';
             label1.style.color = '#495057';
             label1.textContent = time.toFixed(1) + 's';
-            ruler1.appendChild(label1);
+            fragment1.appendChild(label1);
 
             const label2 = document.createElement('div');
             label2.style.position = 'absolute';
@@ -193,8 +197,11 @@ class WaveformRenderer {
             label2.style.fontSize = '11px';
             label2.style.color = '#495057';
             label2.textContent = time.toFixed(1) + 's';
-            ruler2.appendChild(label2);
+            fragment2.appendChild(label2);
         }
+        
+        ruler1.appendChild(fragment1);
+        ruler2.appendChild(fragment2);
     }
 }
 

@@ -351,7 +351,8 @@ class RegionController {
             let firstPointTop = true;
             let firstPointBottom = true;
             
-            // 上側の波形
+            // 波形を描画（上側と下側を一度に計算して効率化）
+            const points = [];
             for (let x = clipStartX; x < clipEndX; x++) {
                 // リージョン内の相対位置（0からregionDuration）
                 const relativeX = x - startX;
@@ -364,10 +365,13 @@ class RegionController {
                 if (pixelStartSample < waveformStartSample || pixelStartSample >= waveformEndSample) continue;
                 if (pixelStartSample < 0 || pixelStartSample >= channelData.length) continue;
                 
-                // 最大値と最小値を計算
+                // 最大値と最小値を計算（最適化：大きな波形の場合は間引く）
                 let max = -Infinity;
                 let min = Infinity;
-                for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample && pixelStartSample + i < waveformEndSample; i++) {
+                const actualSamplesPerPixel = Math.min(samplesPerPixel, channelData.length - pixelStartSample, waveformEndSample - pixelStartSample);
+                // サンプル数が多い場合は間引いて計算（最大100サンプルまで）
+                const sampleStep = actualSamplesPerPixel > 100 ? Math.ceil(actualSamplesPerPixel / 100) : 1;
+                for (let i = 0; i < actualSamplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample && pixelStartSample + i < waveformEndSample; i += sampleStep) {
                     const value = channelData[pixelStartSample + i];
                     if (value > max) max = value;
                     if (value < min) min = value;
@@ -377,46 +381,20 @@ class RegionController {
                 
                 const yTop = centerY - (max * trackHeight / 2 * 0.9);
                 const yBottom = centerY - (min * trackHeight / 2 * 0.9);
-                
-                if (firstPointTop) {
-                    ctx.moveTo(x, yTop);
-                    firstPointTop = false;
-                } else {
-                    ctx.lineTo(x, yTop);
+                points.push({ x, yTop, yBottom });
+            }
+            
+            // 上側の波形を描画
+            if (points.length > 0) {
+                ctx.moveTo(points[0].x, points[0].yTop);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].yTop);
                 }
             }
             
-            // 下側の波形（逆順に描画）
-            for (let x = clipEndX - 1; x >= clipStartX; x--) {
-                // リージョン内の相対位置（0からregionDuration）
-                const relativeX = x - startX;
-                const relativeTime = relativeX / timeScale;
-                
-                // 元波形内の時間
-                const sourceTime = sourceStartTime + relativeTime;
-                const pixelStartSample = Math.floor(sourceTime * sampleRate);
-                
-                if (pixelStartSample < waveformStartSample || pixelStartSample >= waveformEndSample) continue;
-                if (pixelStartSample < 0 || pixelStartSample >= channelData.length) continue;
-                
-                let max = -Infinity;
-                let min = Infinity;
-                for (let i = 0; i < samplesPerPixel && pixelStartSample + i < channelData.length && pixelStartSample + i >= waveformStartSample && pixelStartSample + i < waveformEndSample; i++) {
-                    const value = channelData[pixelStartSample + i];
-                    if (value > max) max = value;
-                    if (value < min) min = value;
-                }
-                
-                if (max === -Infinity || min === Infinity) continue;
-                
-                const yBottom = centerY - (min * trackHeight / 2 * 0.9);
-                
-                if (firstPointBottom) {
-                    ctx.lineTo(x, yBottom);
-                    firstPointBottom = false;
-                } else {
-                    ctx.lineTo(x, yBottom);
-                }
+            // 下側の波形を描画（逆順）
+            for (let i = points.length - 1; i >= 0; i--) {
+                ctx.lineTo(points[i].x, points[i].yBottom);
             }
             
             ctx.closePath();
