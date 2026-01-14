@@ -62,8 +62,6 @@ class LoopMaker {
         // エフェクトのUIとProcessorを初期化（audioContextとaudioProcessorは後で設定）
         this.pitchTransposeUI = null;
         this.pitchTransposeProcessor = null;
-        this.analyzerUI = null;
-        this.analyzerProcessor = null;
         this.multibandCompUI = null;
         this.multibandCompProcessor = null;
         this.spatialDesignUI = null;
@@ -456,10 +454,6 @@ class LoopMaker {
         // 再生位置ラインを消すために再描画
         this.drawWaveforms();
         
-        // Analyzerを停止
-        if (this.analyzerUI) {
-            this.analyzerUI.stop();
-        }
     }
     
     // エフェクトのUIとProcessorを初期化
@@ -472,40 +466,15 @@ class LoopMaker {
             this.pitchTransposeUI = new PitchTransposeUI(this.pitchTransposeProcessor, this);
         }
         
-        // Analyzer
-        const analyzerCanvas = document.getElementById('analyzer-canvas');
-        if (analyzerCanvas && !this.analyzerUI) {
-            this.analyzerProcessor = new AnalyzerProcessor(this.audioContext);
-            // WebGPUが利用可能な場合はWebGPU版を使用、そうでない場合は通常版
-            if (navigator.gpu) {
-                try {
-                    this.analyzerUI = new AnalyzerUIWebGPU(analyzerCanvas, this.analyzerProcessor);
-                    // 非同期初期化のため、少し待ってから確認
-                    // WebGPU初期化が失敗した場合のみCPU版にフォールバック
-                    setTimeout(() => {
-                        if (this.analyzerUI && !this.analyzerUI.isWebGPUReady && !this.analyzerUI.device) {
-                            console.log('Falling back to CPU-based analyzer (WebGPU initialization failed)');
-                            const oldUI = this.analyzerUI;
-                            this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
-                            // 古いUIをクリーンアップ
-                            if (oldUI && oldUI.stop) oldUI.stop();
-                        } else if (this.analyzerUI && this.analyzerUI.isWebGPUReady) {
-                            console.log('WebGPU analyzer is ready');
-                        }
-                    }, 500);
-                } catch (error) {
-                    console.warn('WebGPU analyzer failed, using CPU version:', error);
-                    this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
-                }
-            } else {
-                this.analyzerUI = new AnalyzerUI(analyzerCanvas, this.analyzerProcessor);
-            }
-        }
-        
         // MultiBand Comp
         if (!this.multibandCompUI) {
             this.multibandCompProcessor = new MultiBandCompProcessor(this.audioContext);
             this.multibandCompUI = new MultiBandCompUI(this.multibandCompProcessor);
+
+            // 再生チェーン側にマルチバンドプロセッサーを渡す
+            if (this.audioPlayer && this.audioPlayer.setMultiBandProcessor) {
+                this.audioPlayer.setMultiBandProcessor(this.multibandCompProcessor);
+            }
         }
         
         // Spatial Design

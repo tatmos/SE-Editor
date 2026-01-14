@@ -8,20 +8,21 @@ class MultiBandCompProcessor {
         this.midFilter = null;
         this.highFilter = null;
         
-        // コンプレッサー（DynamicsCompressorNodeを使用）
-        this.lowComp = null;
-        this.midComp = null;
-        this.highComp = null;
+        // 各バンド用のゲインノード
+        this.lowGain = null;
+        this.midGain = null;
+        this.highGain = null;
         
-        // Mix用のGainノード
-        this.dryGain = null;
-        this.wetGain = null;
+        // 入出力ノード
+        this.inputGain = null;
         this.outputGain = null;
         
         this.params = {
-            low: { up: 0, down: 0 },
-            mid: { up: 0, down: 0 },
-            high: { up: 0, down: 0 },
+            // 将来的なUp/Down Comp用のパラメータは残しつつ、
+            // まずは各バンドのGainだけを利用する
+            low:  { up: 0, down: 0, gain: 100 },
+            mid:  { up: 0, down: 0, gain: 100 },
+            high: { up: 0, down: 0, gain: 100 },
             mix: 100
         };
         
@@ -31,6 +32,10 @@ class MultiBandCompProcessor {
     setupFilters() {
         if (!this.audioContext) return;
         
+        // 入出力
+        this.inputGain = this.audioContext.createGain();
+        this.outputGain = this.audioContext.createGain();
+
         // ローパスフィルター（低域用）
         this.lowFilter = this.audioContext.createBiquadFilter();
         this.lowFilter.type = 'lowpass';
@@ -49,97 +54,61 @@ class MultiBandCompProcessor {
         this.midFilter.frequency.value = 1000;
         this.midFilter.Q.value = 1;
         
-        // コンプレッサーを作成
-        this.lowComp = this.audioContext.createDynamicsCompressor();
-        this.midComp = this.audioContext.createDynamicsCompressor();
-        this.highComp = this.audioContext.createDynamicsCompressor();
-        
-        // Gainノードを作成
-        this.dryGain = this.audioContext.createGain();
-        this.wetGain = this.audioContext.createGain();
-        this.outputGain = this.audioContext.createGain();
+        // 各バンド用のゲインノード
+        this.lowGain = this.audioContext.createGain();
+        this.midGain = this.audioContext.createGain();
+        this.highGain = this.audioContext.createGain();
+
+        // ノード接続（3バンドに分割して合算）
+        // 入力 -> 各フィルター -> 各バンドゲイン -> 出力
+        this.inputGain.connect(this.lowFilter);
+        this.inputGain.connect(this.midFilter);
+        this.inputGain.connect(this.highFilter);
+
+        this.lowFilter.connect(this.lowGain);
+        this.midFilter.connect(this.midGain);
+        this.highFilter.connect(this.highGain);
+
+        this.lowGain.connect(this.outputGain);
+        this.midGain.connect(this.outputGain);
+        this.highGain.connect(this.outputGain);
     }
     
     updateMultiBandComp(params) {
         this.params = params;
         
-        // コンプレッサーのパラメータを更新
-        // Up/Down Compの実装（簡易版）
-        if (this.lowComp) {
-            this.lowComp.threshold.value = -24;
-            this.lowComp.knee.value = 30;
-            this.lowComp.ratio.value = 4;
-            this.lowComp.attack.value = 0.003;
-            this.lowComp.release.value = 0.25;
+        // 各バンドのGainを更新（0–200% を 0.0–2.0 のリニアゲインにマップ）
+        const toLinearGain = (percent) => {
+            const clamped = Math.max(0, Math.min(200, percent));
+            return clamped / 100;
+        };
+
+        if (this.lowGain && params.low) {
+            const gain = toLinearGain(params.low.gain ?? 100);
+            this.lowGain.gain.value = gain;
         }
-        
-        if (this.midComp) {
-            this.midComp.threshold.value = -24;
-            this.midComp.knee.value = 30;
-            this.midComp.ratio.value = 4;
-            this.midComp.attack.value = 0.003;
-            this.midComp.release.value = 0.25;
+        if (this.midGain && params.mid) {
+            const gain = toLinearGain(params.mid.gain ?? 100);
+            this.midGain.gain.value = gain;
         }
-        
-        if (this.highComp) {
-            this.highComp.threshold.value = -24;
-            this.highComp.knee.value = 30;
-            this.highComp.ratio.value = 4;
-            this.highComp.attack.value = 0.003;
-            this.highComp.release.value = 0.25;
-        }
-        
-        // Mix割合を設定
-        const mixRatio = params.mix / 100;
-        if (this.dryGain) {
-            this.dryGain.gain.value = 1 - mixRatio;
-        }
-        if (this.wetGain) {
-            this.wetGain.gain.value = mixRatio;
+        if (this.highGain && params.high) {
+            const gain = toLinearGain(params.high.gain ?? 100);
+            this.highGain.gain.value = gain;
         }
     }
     
-    // オーディオノードを接続
-    connect(inputNode, outputNode) {
-        if (!inputNode || !outputNode) return;
-        
-        // 入力から各バンドに分岐
-        const lowBranch = this.audioContext.createGain();
-        const midBranch = this.audioContext.createGain();
-        const highBranch = this.audioContext.createGain();
-        
-        inputNode.connect(lowBranch);
-        inputNode.connect(midBranch);
-        inputNode.connect(highBranch);
-        
-        // 各バンドをフィルターとコンプレッサーに通す
-        lowBranch.connect(this.lowFilter);
-        this.lowFilter.connect(this.lowComp);
-        
-        midBranch.connect(this.midFilter);
-        this.midFilter.connect(this.midComp);
-        
-        highBranch.connect(this.highFilter);
-        this.highFilter.connect(this.highComp);
-        
-        // 各バンドをMix用のGainノードに接続
-        this.lowComp.connect(this.wetGain);
-        this.midComp.connect(this.wetGain);
-        this.highComp.connect(this.wetGain);
-        
-        // DryとWetをMix
-        inputNode.connect(this.dryGain);
-        this.dryGain.connect(this.outputGain);
-        this.wetGain.connect(this.outputGain);
-        
-        // 出力に接続
-        this.outputGain.connect(outputNode);
-    }
-    
+    /**
+     * 外部から接続しやすいように、入力ノードを返す
+     * - 例: source.connect(mbc.getInputNode());
+     */
     getInputNode() {
-        return this.outputGain;
+        return this.inputGain;
     }
     
+    /**
+     * 外部から接続しやすいように、出力ノードを返す
+     * - 例: mbc.getOutputNode().connect(audioContext.destination);
+     */
     getOutputNode() {
         return this.outputGain;
     }

@@ -12,12 +12,20 @@ class AudioPlayer {
         this.isPlaying = false;
         this.track1Processor = new Track1Processor(audioContext);
         this.track2Processor = new Track2Processor(audioContext);
+
+        // マスターバス用 3-Band MultiBand Processor
+        this.multibandCompProcessor = null;
+        this.masterBus = null;
+    }
+
+    // ループメーカー側からマルチバンドプロセッサーを受け取る
+    setMultiBandProcessor(processor) {
+        this.multibandCompProcessor = processor;
     }
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
     // offsetSeconds: 再生開始位置（秒）
-    // mixGainNode: Mix用のGainノード（既にAnalyzerに接続されている）
-    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0, mixGainNode = null) {
+    playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0) {
         if (!track1Buffer || !track2Buffer || this.isPlaying) return false;
 
         try {
@@ -29,9 +37,6 @@ class AudioPlayer {
             if (offset < 0) {
                 offset += loopDuration;
             }
-            
-            // Mix用のGainノード（提供されていない場合は新規作成）
-            const mixNode = mixGainNode || this.audioContext.createGain();
             
             // トラック1: 加工後のバッファをループ再生（トラック1の加工後の範囲でループ）
             const source1 = this.audioContext.createBufferSource();
@@ -46,9 +51,8 @@ class AudioPlayer {
             source1.loopEnd = loopDuration; // トラック1の加工後の範囲でループ
             
             source1.connect(this.gainNode1);
+            // レベルメーター用（個別トラックの音量表示）
             this.gainNode1.connect(this.analyser1);
-            this.gainNode1.connect(mixNode); // Mixノードにも接続
-            this.analyser1.connect(this.audioContext.destination);
             
             // トラック2: 加工後のバッファをループ再生（トラック1と同じ範囲でループ）
             const source2 = this.audioContext.createBufferSource();
@@ -63,14 +67,47 @@ class AudioPlayer {
             source2.loopEnd = loopDuration; // トラック1と同じ範囲でループ
             
             source2.connect(this.gainNode2);
+            // レベルメーター用
             this.gainNode2.connect(this.analyser2);
-            this.gainNode2.connect(mixNode); // Mixノードにも接続
-            this.analyser2.connect(this.audioContext.destination);
-            
-            // Mixノードをdestinationに接続
-            mixNode.connect(this.audioContext.destination);
 
-            this.sourceNodes = [source1, source2, this.gainNode1, this.gainNode2, this.analyser1, this.analyser2, mixNode];
+            // マスターバス（2トラックをまとめて3バンド処理）
+            this.masterBus = this.audioContext.createGain();
+
+            // 各トラックの出力をマスターバスへ
+            this.gainNode1.connect(this.masterBus);
+            this.gainNode2.connect(this.masterBus);
+
+            if (this.multibandCompProcessor &&
+                this.multibandCompProcessor.getInputNode &&
+                this.multibandCompProcessor.getOutputNode) {
+                // masterBus -> MultiBand -> destination
+                this.masterBus.connect(this.multibandCompProcessor.getInputNode());
+                this.multibandCompProcessor.getOutputNode().connect(this.audioContext.destination);
+
+                this.sourceNodes = [
+                    source1,
+                    source2,
+                    this.gainNode1,
+                    this.gainNode2,
+                    this.analyser1,
+                    this.analyser2,
+                    this.masterBus,
+                    this.multibandCompProcessor.getInputNode(),
+                    this.multibandCompProcessor.getOutputNode()
+                ];
+            } else {
+                // マルチバンド未設定の場合は従来通り masterBus から直接出力
+                this.masterBus.connect(this.audioContext.destination);
+                this.sourceNodes = [
+                    source1,
+                    source2,
+                    this.gainNode1,
+                    this.gainNode2,
+                    this.analyser1,
+                    this.analyser2,
+                    this.masterBus
+                ];
+            }
             this.loopDuration = loopDuration;
 
             // 2トラックを同時に再生（オフセット位置から）

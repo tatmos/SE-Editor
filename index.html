@@ -165,14 +165,6 @@
         </div>
 
 
-        <!-- Analyzer -->
-        <div class="analyzer-container">
-            <div class="track-header">
-                <div class="track-label">Analyzer（Mix後の周波数表示）</div>
-            </div>
-            <canvas id="analyzer-canvas" class="analyzer-canvas"></canvas>
-        </div>
-
         <!-- 3-Band MultiBand Comp -->
         <div class="multiband-comp-container">
             <div class="track-header">
@@ -191,6 +183,11 @@
                         <input type="range" id="comp-h-down" class="slider" min="0" max="100" value="0" disabled>
                         <span id="comp-h-down-value">0%</span>
                     </div>
+                    <div class="comp-row">
+                        <label>Gain:</label>
+                        <input type="range" id="comp-h-gain" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-h-gain-value">100%</span>
+                    </div>
                 </div>
                 <div class="band-control">
                     <label>M (Mid)</label>
@@ -204,6 +201,11 @@
                         <input type="range" id="comp-m-down" class="slider" min="0" max="100" value="0" disabled>
                         <span id="comp-m-down-value">0%</span>
                     </div>
+                    <div class="comp-row">
+                        <label>Gain:</label>
+                        <input type="range" id="comp-m-gain" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-m-gain-value">100%</span>
+                    </div>
                 </div>
                 <div class="band-control">
                     <label>L (Low)</label>
@@ -216,6 +218,11 @@
                         <label>Down:</label>
                         <input type="range" id="comp-l-down" class="slider" min="0" max="100" value="0" disabled>
                         <span id="comp-l-down-value">0%</span>
+                    </div>
+                    <div class="comp-row">
+                        <label>Gain:</label>
+                        <input type="range" id="comp-l-gain" class="slider" min="0" max="200" value="100" disabled>
+                        <span id="comp-l-gain-value">100%</span>
                     </div>
                 </div>
             </div>
@@ -269,10 +276,6 @@
     <!-- ピッチトランスポーズ -->
     <script src="pitchTransposeUI.js"></script>
     <script src="pitchTransposeProcessor.js"></script>
-    <!-- Analyzer -->
-    <script src="analyzerUI.js"></script>
-    <script src="analyzerUIWebGPU.js"></script>
-    <script src="analyzerProcessor.js"></script>
     <!-- 3-Band MultiBand Comp -->
     <script src="multibandCompUI.js"></script>
     <script src="multibandCompProcessor.js"></script>
