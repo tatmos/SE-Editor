@@ -94,6 +94,24 @@ class UIController {
             this.toggleSettingsTrack2Btn.addEventListener('click', () => this.toggleTrackSettings(2));
         }
 
+        // ドロップオーバーレイボタン（元波形1）
+        if (this.dropOverlay1) {
+            this.dropOverlay1.addEventListener('click', () => {
+                if (this.fileInput1) {
+                    this.fileInput1.click();
+                }
+            });
+        }
+
+        // ドロップオーバーレイボタン（元波形2）
+        if (this.dropOverlay2) {
+            this.dropOverlay2.addEventListener('click', () => {
+                if (this.fileInput2) {
+                    this.fileInput2.click();
+                }
+            });
+        }
+
         // ドロップゾーン1（元波形1）
         if (this.dropZone1) {
             ['dragenter', 'dragover'].forEach(evt => {
