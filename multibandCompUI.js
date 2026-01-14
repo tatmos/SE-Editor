@@ -25,10 +25,13 @@ class MultiBandCompUI {
                 down: getSliderValue('comp-h-down', 0),
                 gain: getSliderValue('comp-h-gain', 100)
             },
-            mix: getSliderValue('comp-mix', 100)
+            mix: getSliderValue('comp-mix', 100),
+            lowMidCrossover: getSliderValue('comp-low-mid-crossover', 500),
+            midHighCrossover: getSliderValue('comp-mid-high-crossover', 3000)
         };
         
         this.setupEventListeners();
+        this.setupBypassButton();
         this.updateDisplay();
         // 初期化時にプロセッサーに値を反映
         this.updateProcessor();
@@ -46,7 +49,9 @@ class MultiBandCompUI {
             { id: 'comp-h-gain', param: 'high', type: 'gain' },
             { id: 'comp-m-gain', param: 'mid', type: 'gain' },
             { id: 'comp-l-gain', param: 'low', type: 'gain' },
-            { id: 'comp-mix', param: 'mix', type: 'mix' }
+            { id: 'comp-mix', param: 'mix', type: 'mix' },
+            { id: 'comp-low-mid-crossover', param: 'lowMidCrossover', type: 'crossover' },
+            { id: 'comp-mid-high-crossover', param: 'midHighCrossover', type: 'crossover' }
         ];
         
         sliders.forEach(slider => {
@@ -56,6 +61,8 @@ class MultiBandCompUI {
                     const value = parseFloat(e.target.value);
                     if (slider.param === 'mix') {
                         this.params.mix = value;
+                    } else if (slider.type === 'crossover') {
+                        this.params[slider.param] = value;
                     } else {
                         // gain と up/down をまとめて扱う
                         this.params[slider.param][slider.type] = value;
@@ -65,6 +72,35 @@ class MultiBandCompUI {
                 });
             }
         });
+    }
+    
+    setupBypassButton() {
+        const bypassButton = document.getElementById('comp-bypass');
+        if (bypassButton) {
+            bypassButton.addEventListener('click', () => {
+                const isBypassed = this.audioProcessor ? !this.audioProcessor.getBypass() : false;
+                if (this.audioProcessor) {
+                    this.audioProcessor.setBypass(isBypassed);
+                }
+                this.updateBypassButton(isBypassed);
+            });
+            // 初期状態を反映
+            const isBypassed = this.audioProcessor ? this.audioProcessor.getBypass() : false;
+            this.updateBypassButton(isBypassed);
+        }
+    }
+    
+    updateBypassButton(isBypassed) {
+        const bypassButton = document.getElementById('comp-bypass');
+        if (bypassButton) {
+            if (isBypassed) {
+                bypassButton.classList.add('active');
+                bypassButton.textContent = 'Bypass ON';
+            } else {
+                bypassButton.classList.remove('active');
+                bypassButton.textContent = 'Bypass';
+            }
+        }
     }
     
     updateDisplay() {
@@ -79,13 +115,19 @@ class MultiBandCompUI {
             'comp-l-up-value': Math.round(this.params.low.up),
             'comp-l-down-value': Math.round(this.params.low.down),
             'comp-l-gain-value': Math.round(this.params.low.gain),
-            'comp-mix-value': Math.round(this.params.mix)
+            'comp-mix-value': Math.round(this.params.mix),
+            'comp-low-mid-crossover-value': Math.round(this.params.lowMidCrossover),
+            'comp-mid-high-crossover-value': Math.round(this.params.midHighCrossover)
         };
         
         Object.entries(elements).forEach(([id, value]) => {
             const element = document.getElementById(id);
             if (element) {
-                element.textContent = value + '%';
+                if (id.includes('crossover')) {
+                    element.textContent = value + ' Hz';
+                } else {
+                    element.textContent = value + '%';
+                }
             }
         });
     }
@@ -101,6 +143,10 @@ class MultiBandCompUI {
         sliders.forEach(slider => {
             slider.disabled = false;
         });
+        const bypassButton = document.getElementById('comp-bypass');
+        if (bypassButton) {
+            bypassButton.disabled = false;
+        }
     }
     
     disable() {
@@ -108,6 +154,10 @@ class MultiBandCompUI {
         sliders.forEach(slider => {
             slider.disabled = true;
         });
+        const bypassButton = document.getElementById('comp-bypass');
+        if (bypassButton) {
+            bypassButton.disabled = true;
+        }
     }
     
     getParams() {

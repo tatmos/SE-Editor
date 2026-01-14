@@ -8,16 +8,18 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
-    padding: 12px;
+    padding: 0;
+    margin: 0;
     color: #333;
 }
 
 .container {
-    max-width: 1100px;
-    margin: 0 auto;
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
     background: white;
-    border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border-radius: 0;
+    box-shadow: none;
     padding: 24px;
 }
 
@@ -805,6 +807,74 @@ header h1 {
 
 .comp-mix-control span {
     min-width: 50px;
+    text-align: right;
+    font-weight: 600;
+    color: #667eea;
+}
+
+.bypass-btn {
+    padding: 6px 16px;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    background: white;
+    color: #667eea;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.bypass-btn:hover:not(:disabled) {
+    background: #f0f0f0;
+    transform: translateY(-1px);
+}
+
+.bypass-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+.bypass-btn.active:hover:not(:disabled) {
+    background: #5568d3;
+}
+
+.bypass-btn:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    border-color: #e0e0e0;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.comp-crossover-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.comp-crossover-control {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+.comp-crossover-control label {
+    font-weight: 600;
+    color: #333;
+    min-width: 180px;
+}
+
+.comp-crossover-control .slider {
+    flex: 1;
+}
+
+.comp-crossover-control span {
+    min-width: 70px;
     text-align: right;
     font-weight: 600;
     color: #667eea;

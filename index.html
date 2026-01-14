@@ -169,6 +169,7 @@
         <div class="multiband-comp-container">
             <div class="track-header">
                 <div class="track-label">3-Band MultiBand Up/Down Comp</div>
+                <button id="comp-bypass" class="bypass-btn" disabled>Bypass</button>
             </div>
             <div class="multiband-controls">
                 <div class="band-control">
@@ -230,6 +231,18 @@
                 <label for="comp-mix">Mix:</label>
                 <input type="range" id="comp-mix" class="slider" min="0" max="100" value="100" disabled>
                 <span id="comp-mix-value">100%</span>
+            </div>
+            <div class="comp-crossover-controls">
+                <div class="comp-crossover-control">
+                    <label for="comp-low-mid-crossover">Low-Mid Crossover:</label>
+                    <input type="range" id="comp-low-mid-crossover" class="slider" min="100" max="2000" value="500" step="10" disabled>
+                    <span id="comp-low-mid-crossover-value">500 Hz</span>
+                </div>
+                <div class="comp-crossover-control">
+                    <label for="comp-mid-high-crossover">Mid-High Crossover:</label>
+                    <input type="range" id="comp-mid-high-crossover" class="slider" min="1000" max="10000" value="3000" step="50" disabled>
+                    <span id="comp-mid-high-crossover-value">3000 Hz</span>
+                </div>
             </div>
         </div>
 

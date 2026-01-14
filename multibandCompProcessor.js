@@ -3,10 +3,16 @@ class MultiBandCompProcessor {
     constructor(audioContext) {
         this.audioContext = audioContext;
         
-        // バンド分割用のフィルター
-        this.lowFilter = null;
-        this.midFilter = null;
-        this.highFilter = null;
+        // バンド分割用のフィルター（Linkwitz-Riley 4次フィルター用）
+        // 各バンドで2つのBiquadFilterをカスケード接続して4次フィルターを実現
+        this.lowFilter1 = null;  // 低域用ローパス1
+        this.lowFilter2 = null;  // 低域用ローパス2
+        this.midFilterHigh1 = null; // 中域用ハイパス1
+        this.midFilterHigh2 = null; // 中域用ハイパス2
+        this.midFilterLow1 = null;  // 中域用ローパス1
+        this.midFilterLow2 = null;  // 中域用ローパス2
+        this.highFilter1 = null; // 高域用ハイパス1
+        this.highFilter2 = null; // 高域用ハイパス2
         
         // 各バンド用のゲインノード
         this.lowGain = null;
@@ -28,8 +34,13 @@ class MultiBandCompProcessor {
             low:  { up: 0, down: 0, gain: 100 },
             mid:  { up: 0, down: 0, gain: 100 },
             high: { up: 0, down: 0, gain: 100 },
-            mix: 100
+            mix: 100,
+            lowMidCrossover: 500,   // 低域と中域のクロスオーバー
+            midHighCrossover: 3000   // 中域と高域のクロスオーバー
         };
+        
+        // Bypass状態
+        this.isBypassed = false;
         
         this.setupFilters();
     }
@@ -41,23 +52,55 @@ class MultiBandCompProcessor {
         this.inputGain = this.audioContext.createGain();
         this.outputGain = this.audioContext.createGain();
 
-        // ローパスフィルター（低域用）
-        this.lowFilter = this.audioContext.createBiquadFilter();
-        this.lowFilter.type = 'lowpass';
-        this.lowFilter.frequency.value = 250;
-        this.lowFilter.Q.value = 1;
+        // クロスオーバー周波数（初期値）
+        const lowMidCrossover = this.params.lowMidCrossover ?? 500;
+        const midHighCrossover = this.params.midHighCrossover ?? 3000;
         
-        // ハイパスフィルター（高域用）
-        this.highFilter = this.audioContext.createBiquadFilter();
-        this.highFilter.type = 'highpass';
-        this.highFilter.frequency.value = 4000;
-        this.highFilter.Q.value = 1;
+        // Linkwitz-Riley 4次フィルターを実装
+        // 各バンドで2つの2次バターワースフィルターをカスケード接続
         
-        // ミッドバンドはバンドパスフィルターで実現
-        this.midFilter = this.audioContext.createBiquadFilter();
-        this.midFilter.type = 'bandpass';
-        this.midFilter.frequency.value = 1000;
-        this.midFilter.Q.value = 1;
+        // 低域: 2つのローパスフィルター（4次Linkwitz-Riley）
+        this.lowFilter1 = this.audioContext.createBiquadFilter();
+        this.lowFilter1.type = 'lowpass';
+        this.lowFilter1.frequency.value = lowMidCrossover;
+        this.lowFilter1.Q.value = 0.707; // バターワース特性
+        
+        this.lowFilter2 = this.audioContext.createBiquadFilter();
+        this.lowFilter2.type = 'lowpass';
+        this.lowFilter2.frequency.value = lowMidCrossover;
+        this.lowFilter2.Q.value = 0.707;
+        
+        // 中域: ハイパス（2つ）+ ローパス（2つ）の組み合わせ
+        this.midFilterHigh1 = this.audioContext.createBiquadFilter();
+        this.midFilterHigh1.type = 'highpass';
+        this.midFilterHigh1.frequency.value = lowMidCrossover;
+        this.midFilterHigh1.Q.value = 0.707;
+        
+        this.midFilterHigh2 = this.audioContext.createBiquadFilter();
+        this.midFilterHigh2.type = 'highpass';
+        this.midFilterHigh2.frequency.value = lowMidCrossover;
+        this.midFilterHigh2.Q.value = 0.707;
+        
+        this.midFilterLow1 = this.audioContext.createBiquadFilter();
+        this.midFilterLow1.type = 'lowpass';
+        this.midFilterLow1.frequency.value = midHighCrossover;
+        this.midFilterLow1.Q.value = 0.707;
+        
+        this.midFilterLow2 = this.audioContext.createBiquadFilter();
+        this.midFilterLow2.type = 'lowpass';
+        this.midFilterLow2.frequency.value = midHighCrossover;
+        this.midFilterLow2.Q.value = 0.707;
+        
+        // 高域: 2つのハイパスフィルター（4次Linkwitz-Riley）
+        this.highFilter1 = this.audioContext.createBiquadFilter();
+        this.highFilter1.type = 'highpass';
+        this.highFilter1.frequency.value = midHighCrossover;
+        this.highFilter1.Q.value = 0.707;
+        
+        this.highFilter2 = this.audioContext.createBiquadFilter();
+        this.highFilter2.type = 'highpass';
+        this.highFilter2.frequency.value = midHighCrossover;
+        this.highFilter2.Q.value = 0.707;
         
         // 各バンド用のゲインノード
         this.lowGain = this.audioContext.createGain();
@@ -72,14 +115,24 @@ class MultiBandCompProcessor {
         this.bypassMixGain = this.audioContext.createGain();
 
         // ノード接続
-        // エフェクト経路: 入力 -> 各フィルター -> 各バンドゲイン -> エフェクトMixゲイン -> 出力
-        this.inputGain.connect(this.lowFilter);
-        this.inputGain.connect(this.midFilter);
-        this.inputGain.connect(this.highFilter);
-
-        this.lowFilter.connect(this.lowGain);
-        this.midFilter.connect(this.midGain);
-        this.highFilter.connect(this.highGain);
+        // エフェクト経路: 入力 -> 各フィルター（4次Linkwitz-Riley） -> 各バンドゲイン -> エフェクトMixゲイン -> 出力
+        
+        // 低域: 入力 -> ローパス1 -> ローパス2 -> ゲイン（4次Linkwitz-Riley）
+        this.inputGain.connect(this.lowFilter1);
+        this.lowFilter1.connect(this.lowFilter2);
+        this.lowFilter2.connect(this.lowGain);
+        
+        // 中域: 入力 -> ハイパス1 -> ハイパス2 -> ローパス1 -> ローパス2 -> ゲイン（帯域通過、4次Linkwitz-Riley）
+        this.inputGain.connect(this.midFilterHigh1);
+        this.midFilterHigh1.connect(this.midFilterHigh2);
+        this.midFilterHigh2.connect(this.midFilterLow1);
+        this.midFilterLow1.connect(this.midFilterLow2);
+        this.midFilterLow2.connect(this.midGain);
+        
+        // 高域: 入力 -> ハイパス1 -> ハイパス2 -> ゲイン（4次Linkwitz-Riley）
+        this.inputGain.connect(this.highFilter1);
+        this.highFilter1.connect(this.highFilter2);
+        this.highFilter2.connect(this.highGain);
 
         this.lowGain.connect(this.effectMixGain);
         this.midGain.connect(this.effectMixGain);
@@ -95,7 +148,44 @@ class MultiBandCompProcessor {
     }
     
     updateMultiBandComp(params) {
-        this.params = params;
+        this.params = { ...this.params, ...params };
+        
+        // クロスオーバー周波数を更新（4次Linkwitz-Rileyフィルター）
+        if (params.lowMidCrossover !== undefined) {
+            const freq = Math.max(20, Math.min(20000, params.lowMidCrossover));
+            // 低域: 2つのローパスフィルター
+            if (this.lowFilter1) {
+                this.lowFilter1.frequency.value = freq;
+            }
+            if (this.lowFilter2) {
+                this.lowFilter2.frequency.value = freq;
+            }
+            // 中域: 2つのハイパスフィルター
+            if (this.midFilterHigh1) {
+                this.midFilterHigh1.frequency.value = freq;
+            }
+            if (this.midFilterHigh2) {
+                this.midFilterHigh2.frequency.value = freq;
+            }
+        }
+        
+        if (params.midHighCrossover !== undefined) {
+            const freq = Math.max(20, Math.min(20000, params.midHighCrossover));
+            // 中域: 2つのローパスフィルター
+            if (this.midFilterLow1) {
+                this.midFilterLow1.frequency.value = freq;
+            }
+            if (this.midFilterLow2) {
+                this.midFilterLow2.frequency.value = freq;
+            }
+            // 高域: 2つのハイパスフィルター
+            if (this.highFilter1) {
+                this.highFilter1.frequency.value = freq;
+            }
+            if (this.highFilter2) {
+                this.highFilter2.frequency.value = freq;
+            }
+        }
         
         // 各バンドのGainを更新（0–200% を 0.0–2.0 のリニアゲインにマップ）
         const toLinearGain = (percent) => {
@@ -117,7 +207,7 @@ class MultiBandCompProcessor {
         }
 
         // Mix値を更新（0–100% を 0.0–1.0 のリニアゲインにマップ）
-        const mix = params.mix ?? 100;
+        const mix = params.mix ?? this.params.mix ?? 100;
         const clampedMix = Math.max(0, Math.min(100, mix));
         const effectMix = clampedMix / 100;      // エフェクト経路のゲイン
         const bypassMix = (100 - clampedMix) / 100;  // バイパス経路のゲイン
@@ -128,6 +218,43 @@ class MultiBandCompProcessor {
         if (this.bypassMixGain) {
             this.bypassMixGain.gain.value = bypassMix;
         }
+    }
+    
+    /**
+     * Bypass状態を切り替え
+     */
+    setBypass(bypassed) {
+        this.isBypassed = bypassed;
+        
+        if (bypassed) {
+            // Bypass時: エフェクト経路を無効化、バイパス経路のみ
+            if (this.effectMixGain) {
+                this.effectMixGain.gain.value = 0;
+            }
+            if (this.bypassMixGain) {
+                this.bypassMixGain.gain.value = 1;
+            }
+        } else {
+            // 通常時: Mix値に応じて設定
+            const mix = this.params.mix ?? 100;
+            const clampedMix = Math.max(0, Math.min(100, mix));
+            const effectMix = clampedMix / 100;
+            const bypassMix = (100 - clampedMix) / 100;
+            
+            if (this.effectMixGain) {
+                this.effectMixGain.gain.value = effectMix;
+            }
+            if (this.bypassMixGain) {
+                this.bypassMixGain.gain.value = bypassMix;
+            }
+        }
+    }
+    
+    /**
+     * Bypass状態を取得
+     */
+    getBypass() {
+        return this.isBypassed;
     }
     
     /**
