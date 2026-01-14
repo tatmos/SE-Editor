@@ -14,12 +14,19 @@ class SpectrumAnalyzer {
         this.sonogramColumnIndex = 0; // 現在描画している列のインデックス
         this.sonogramMaxColumns = 0; // キャンバス幅に応じた最大列数
         
+        // ソノグラム更新頻度（フレームごと）
+        this.sonogramUpdateRate = 1; // デフォルトは毎フレーム
+        this.sonogramUpdateCounter = 0; // 更新カウンター
+        
         // キャンバスのサイズを調整
         this.resize();
         window.addEventListener('resize', () => this.resize());
         
         // モード切り替えボタンのイベントリスナーを設定
         this.setupModeButtons();
+        
+        // 更新頻度スライダーのイベントリスナーを設定
+        this.setupUpdateRateSlider();
     }
     
     setupModeButtons() {
@@ -39,20 +46,43 @@ class SpectrumAnalyzer {
         }
     }
     
+    setupUpdateRateSlider() {
+        const slider = document.getElementById('sonogram-update-rate');
+        const valueDisplay = document.getElementById('sonogram-update-rate-value');
+        const control = document.getElementById('sonogram-update-control');
+        
+        if (slider && valueDisplay) {
+            slider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                this.sonogramUpdateRate = value;
+                valueDisplay.textContent = value;
+            });
+        }
+    }
+    
     setMode(mode) {
         this.mode = mode;
         
         // ボタンの状態を更新
         const spectrumBtn = document.getElementById('spectrum-mode-spectrum');
         const sonogramBtn = document.getElementById('spectrum-mode-sonogram');
+        const updateControl = document.getElementById('sonogram-update-control');
         
         if (spectrumBtn && sonogramBtn) {
             if (mode === 'spectrum') {
                 spectrumBtn.classList.add('active');
                 sonogramBtn.classList.remove('active');
+                // スペクトラムモードの時は更新頻度コントロールを非表示
+                if (updateControl) {
+                    updateControl.classList.add('hidden');
+                }
             } else {
                 spectrumBtn.classList.remove('active');
                 sonogramBtn.classList.add('active');
+                // ソノグラムモードの時は更新頻度コントロールを表示
+                if (updateControl) {
+                    updateControl.classList.remove('hidden');
+                }
             }
         }
         
@@ -60,6 +90,21 @@ class SpectrumAnalyzer {
         if (mode === 'sonogram') {
             this.resetSonogram();
         }
+    }
+    
+    /**
+     * ソノグラムの更新が必要かどうかをチェック
+     * @returns {boolean} 更新が必要な場合true
+     */
+    shouldUpdateSonogram() {
+        if (this.mode !== 'sonogram') return true; // スペクトラムモードは常に更新
+        
+        this.sonogramUpdateCounter++;
+        if (this.sonogramUpdateCounter >= this.sonogramUpdateRate) {
+            this.sonogramUpdateCounter = 0;
+            return true;
+        }
+        return false;
     }
     
     resetSonogram() {

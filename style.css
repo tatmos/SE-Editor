@@ -864,6 +864,39 @@ header h1 {
     display: block;
 }
 
+.sonogram-update-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+    margin-top: 10px;
+}
+
+.sonogram-update-control.hidden {
+    display: none;
+}
+
+.sonogram-update-control label {
+    font-weight: 600;
+    color: #333;
+    min-width: 80px;
+}
+
+.sonogram-update-control .slider {
+    flex: 1;
+    max-width: 200px;
+}
+
+.sonogram-update-control span {
+    min-width: 30px;
+    text-align: center;
+    font-weight: 600;
+    color: #667eea;
+}
+
 /* 空間デザイン */
 .spatial-design-container {
     background: #f8f9fa;

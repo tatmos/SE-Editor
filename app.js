@@ -444,6 +444,13 @@ class LoopMaker {
     updateSpectrum() {
         if (!this.audioPlayer || !this.spectrumAnalyzer) return;
         
+        // ソノグラムモードの場合は更新頻度をチェック
+        if (this.spectrumAnalyzer.mode === 'sonogram') {
+            if (!this.spectrumAnalyzer.shouldUpdateSonogram()) {
+                return; // 更新不要の場合はスキップ
+            }
+        }
+        
         const freqData = this.audioPlayer.getFrequencyData();
         if (freqData) {
             this.spectrumAnalyzer.draw(
