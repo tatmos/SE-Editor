@@ -16,6 +16,15 @@ class SpatialDesignUI {
         this.dragTrack = null;
         
         this.setupEventListeners();
+        this.setupBypassButton();
+        // 初期モードを設定
+        if (this.audioProcessor && this.audioProcessor.setMode) {
+            const modeSelect = document.getElementById('spatial-mode');
+            if (modeSelect) {
+                this.audioProcessor.setMode(modeSelect.value);
+                this.updateStereoWidthVisibility(modeSelect.value);
+            }
+        }
         this.render();
     }
     
@@ -33,6 +42,71 @@ class SpatialDesignUI {
                 document.getElementById('reverb-mix-value').textContent = Math.round(this.reverbMix) + '%';
                 this.updateProcessor();
             });
+        }
+        
+        // モード選択
+        const modeSelect = document.getElementById('spatial-mode');
+        if (modeSelect) {
+            modeSelect.addEventListener('change', (e) => {
+                const mode = e.target.value;
+                if (this.audioProcessor && this.audioProcessor.setMode) {
+                    this.audioProcessor.setMode(mode);
+                }
+                this.updateStereoWidthVisibility(mode);
+            });
+        }
+        
+        // ステレオ幅スライダー
+        const stereoWidthSlider = document.getElementById('stereo-width');
+        if (stereoWidthSlider) {
+            stereoWidthSlider.addEventListener('input', (e) => {
+                const width = parseFloat(e.target.value);
+                document.getElementById('stereo-width-value').textContent = Math.round(width) + '%';
+                if (this.audioProcessor && this.audioProcessor.setStereoWidth) {
+                    this.audioProcessor.setStereoWidth(width);
+                }
+            });
+        }
+    }
+    
+    updateStereoWidthVisibility(mode) {
+        const stereoWidthControl = document.getElementById('stereo-width-control');
+        if (stereoWidthControl) {
+            if (mode === 'stereo-width') {
+                stereoWidthControl.classList.remove('hidden');
+            } else {
+                stereoWidthControl.classList.add('hidden');
+            }
+        }
+    }
+    
+    setupBypassButton() {
+        const bypassButton = document.getElementById('spatial-bypass');
+        if (bypassButton) {
+            bypassButton.addEventListener('click', () => {
+                const isBypassed = this.audioProcessor ? !this.audioProcessor.getBypass() : false;
+                if (this.audioProcessor) {
+                    this.audioProcessor.setBypass(isBypassed);
+                }
+                this.updateBypassButton(isBypassed);
+            });
+            
+            // 初期状態を反映
+            const isBypassed = this.audioProcessor ? this.audioProcessor.getBypass() : false;
+            this.updateBypassButton(isBypassed);
+        }
+    }
+    
+    updateBypassButton(isBypassed) {
+        const bypassButton = document.getElementById('spatial-bypass');
+        if (bypassButton) {
+            if (isBypassed) {
+                bypassButton.classList.add('active');
+                bypassButton.textContent = 'Bypass ON';
+            } else {
+                bypassButton.classList.remove('active');
+                bypassButton.textContent = 'Bypass';
+            }
         }
     }
     
@@ -161,6 +235,11 @@ class SpatialDesignUI {
         ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
         ctx.fill();
         
+        // 距離を計算（10mスケール）
+        const maxDistance = 10.0;
+        const distance1 = Math.sqrt(this.track1Position.x * this.track1Position.x + this.track1Position.z * this.track1Position.z) * maxDistance;
+        const distance2 = Math.sqrt(this.track2Position.x * this.track2Position.x + this.track2Position.z * this.track2Position.z) * maxDistance;
+        
         // トラック1の位置
         const track1X = this.track1Position.x * centerX + centerX;
         const track1Z = this.track1Position.z * centerY + centerY;
@@ -172,6 +251,16 @@ class SpatialDesignUI {
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('T1', track1X, track1Z + 4);
+        
+        // トラック1の距離情報を表示
+        ctx.fillStyle = '#667eea';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        const distance1Text = `距離: ${distance1.toFixed(1)}m`;
+        const distance1Width = ctx.measureText(distance1Text).width;
+        ctx.fillRect(track1X + 20, track1Z - 8, distance1Width + 4, 14);
+        ctx.fillStyle = 'white';
+        ctx.fillText(distance1Text, track1X + 22, track1Z + 2);
         
         // トラック2の位置
         const track2X = this.track2Position.x * centerX + centerX;
@@ -185,6 +274,16 @@ class SpatialDesignUI {
         ctx.textAlign = 'center';
         ctx.fillText('T2', track2X, track2Z + 4);
         
+        // トラック2の距離情報を表示
+        ctx.fillStyle = '#764ba2';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        const distance2Text = `距離: ${distance2.toFixed(1)}m`;
+        const distance2Width = ctx.measureText(distance2Text).width;
+        ctx.fillRect(track2X + 20, track2Z - 8, distance2Width + 4, 14);
+        ctx.fillStyle = 'white';
+        ctx.fillText(distance2Text, track2X + 22, track2Z + 2);
+        
         // ラベル
         ctx.fillStyle = '#333';
         ctx.font = '12px sans-serif';
@@ -192,6 +291,12 @@ class SpatialDesignUI {
         ctx.fillText('X軸（左右）', 10, 20);
         ctx.textAlign = 'right';
         ctx.fillText('Z軸（前後）', width - 10, height - 10);
+        
+        // 距離スケールの説明
+        ctx.fillStyle = '#666';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('※ 中心からの距離: 最大10m', 10, height - 10);
     }
     
     enable() {
@@ -199,12 +304,36 @@ class SpatialDesignUI {
         if (slider) {
             slider.disabled = false;
         }
+        const bypassButton = document.getElementById('spatial-bypass');
+        if (bypassButton) {
+            bypassButton.disabled = false;
+        }
+        const modeSelect = document.getElementById('spatial-mode');
+        if (modeSelect) {
+            modeSelect.disabled = false;
+        }
+        const stereoWidthSlider = document.getElementById('stereo-width');
+        if (stereoWidthSlider) {
+            stereoWidthSlider.disabled = false;
+        }
     }
     
     disable() {
         const slider = document.getElementById('reverb-mix');
         if (slider) {
             slider.disabled = true;
+        }
+        const bypassButton = document.getElementById('spatial-bypass');
+        if (bypassButton) {
+            bypassButton.disabled = true;
+        }
+        const modeSelect = document.getElementById('spatial-mode');
+        if (modeSelect) {
+            modeSelect.disabled = true;
+        }
+        const stereoWidthSlider = document.getElementById('stereo-width');
+        if (stereoWidthSlider) {
+            stereoWidthSlider.disabled = true;
         }
     }
 }

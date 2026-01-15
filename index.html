@@ -270,14 +270,53 @@
             </div>
         </div>
 
+        <!-- 空間デザイン -->
+        <div class="spatial-design-container">
+            <div class="track-header">
+                <div class="track-label">空間デザイン（X-Z平面）</div>
+                <div class="track-header-buttons">
+                    <button id="spatial-bypass" class="bypass-btn" disabled>Bypass</button>
+                    <button id="toggle-spatial-design" class="detail-btn" title="表示/非表示">▼</button>
+                </div>
+            </div>
+            <div class="spatial-controls hidden" id="spatial-controls">
+                <div class="spatial-mode-control">
+                    <label for="spatial-mode">モード:</label>
+                    <select id="spatial-mode" class="spatial-mode-select" disabled>
+                        <option value="mono-pan">LRミックス→モノラル→音像定位</option>
+                        <option value="channel-volume">チャンネルボリューム変更のみ</option>
+                        <option value="stereo-width">ステレオ幅指定（L,R独立配置）</option>
+                    </select>
+                </div>
+                <canvas id="spatial-canvas" class="spatial-canvas"></canvas>
+                <div class="spatial-mix-control">
+                    <label for="reverb-mix">残響効果 Mix:</label>
+                    <input type="range" id="reverb-mix" class="slider" min="0" max="100" value="0" disabled>
+                    <span id="reverb-mix-value">0%</span>
+                </div>
+                <div class="spatial-stereo-width-control hidden" id="stereo-width-control">
+                    <label for="stereo-width">ステレオ幅:</label>
+                    <input type="range" id="stereo-width" class="slider" min="0" max="200" value="100" disabled>
+                    <span id="stereo-width-value">100%</span>
+                </div>
+            </div>
+        </div>
+
         <!-- スペクトラムアナライザー -->
         <div class="spectrum-analyzer-container">
             <div class="track-header">
                 <div class="track-label">加工後の音解析</div>
-                <div class="spectrum-mode-buttons">
-                    <button id="spectrum-mode-spectrum" class="spectrum-mode-btn active" title="スペクトラム表示">スペクトラム</button>
-                    <button id="spectrum-mode-sonogram" class="spectrum-mode-btn" title="ソノグラム表示">ソノグラム</button>
-                    <button id="spectrum-mode-waveform" class="spectrum-mode-btn" title="波形表示">波形</button>
+                <div class="spectrum-controls-header">
+                    <div class="spectrum-mode-buttons">
+                        <button id="spectrum-mode-spectrum" class="spectrum-mode-btn active" title="スペクトラム表示">スペクトラム</button>
+                        <button id="spectrum-mode-sonogram" class="spectrum-mode-btn" title="ソノグラム表示">ソノグラム</button>
+                        <button id="spectrum-mode-waveform" class="spectrum-mode-btn" title="波形表示">波形</button>
+                    </div>
+                    <div class="spectrum-channel-buttons">
+                        <button id="spectrum-channel-mix" class="spectrum-channel-btn active" title="Mix（左右ミックス）">Mix</button>
+                        <button id="spectrum-channel-l" class="spectrum-channel-btn" title="左チャンネル">L</button>
+                        <button id="spectrum-channel-r" class="spectrum-channel-btn" title="右チャンネル">R</button>
+                    </div>
                 </div>
             </div>
             <div class="spectrum-controls">
@@ -302,21 +341,6 @@
             </div>
             <div class="processed-level-meters" id="processed-level-meters">
                 <!-- 動的に生成される -->
-            </div>
-        </div>
-
-        <!-- 空間デザイン -->
-        <div class="spatial-design-container">
-            <div class="track-header">
-                <div class="track-label">空間デザイン（X-Z平面）</div>
-            </div>
-            <div class="spatial-controls">
-                <canvas id="spatial-canvas" class="spatial-canvas"></canvas>
-                <div class="spatial-mix-control">
-                    <label for="reverb-mix">残響効果 Mix:</label>
-                    <input type="range" id="reverb-mix" class="slider" min="0" max="100" value="0" disabled>
-                    <span id="reverb-mix-value">0%</span>
-                </div>
             </div>
         </div>
 

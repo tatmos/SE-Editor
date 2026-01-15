@@ -1,7 +1,11 @@
-// 空間デザイン 音響処理部分（パンニング・残響）
+// 空間デザイン 音響処理部分（パンニング・距離減衰・残響）
 class SpatialDesignProcessor {
     constructor(audioContext) {
         this.audioContext = audioContext;
+        
+        // 距離減衰用のGainノード
+        this.track1DistanceGain = null;
+        this.track2DistanceGain = null;
         
         // パンニング用のGainノード
         this.track1PanLeft = null;
@@ -21,17 +25,52 @@ class SpatialDesignProcessor {
         this.track2Position = { x: 0, z: 0 };
         this.reverbMix = 0;
         
+        // 距離減衰のパラメータ（10mを基準とする）
+        this.maxDistance = 10.0; // 最大距離（メートル）
+        this.referenceDistance = 1.0; // 基準距離（メートル）
+        
+        // バイパス状態
+        this.isBypassed = false;
+        
+        // モード設定
+        this.mode = 'mono-pan'; // 'mono-pan', 'channel-volume', 'stereo-width'
+        this.stereoWidth = 100; // ステレオ幅（0-200%）
+        
+        // チャンネルボリューム用のGainノード
+        this.track1LeftVolume = null;
+        this.track1RightVolume = null;
+        this.track2LeftVolume = null;
+        this.track2RightVolume = null;
+        
+        // モノラル化用のMerger
+        this.track1MonoMerger = null;
+        this.track2MonoMerger = null;
+        
         this.setupNodes();
     }
     
     setupNodes() {
         if (!this.audioContext) return;
         
+        // 距離減衰用のGainノードを作成
+        this.track1DistanceGain = this.audioContext.createGain();
+        this.track2DistanceGain = this.audioContext.createGain();
+        
         // パンニング用のGainノードを作成
         this.track1PanLeft = this.audioContext.createGain();
         this.track1PanRight = this.audioContext.createGain();
         this.track2PanLeft = this.audioContext.createGain();
         this.track2PanRight = this.audioContext.createGain();
+        
+        // チャンネルボリューム用のGainノードを作成
+        this.track1LeftVolume = this.audioContext.createGain();
+        this.track1RightVolume = this.audioContext.createGain();
+        this.track2LeftVolume = this.audioContext.createGain();
+        this.track2RightVolume = this.audioContext.createGain();
+        
+        // モノラル化用のMergerを作成
+        this.track1MonoMerger = this.audioContext.createChannelMerger(1);
+        this.track2MonoMerger = this.audioContext.createChannelMerger(1);
         
         // 残響用のGainノードを作成
         this.track1ReverbGain = this.audioContext.createGain();
@@ -73,25 +112,43 @@ class SpatialDesignProcessor {
         this.track2Position = track2Position;
         this.reverbMix = reverbMix;
         
-        // パンニングを更新（X座標に基づく）
-        if (this.track1PanLeft && this.track1PanRight) {
-            const pan1 = (track1Position.x + 1) / 2; // -1から1を0から1に変換
-            this.track1PanLeft.gain.value = 1 - pan1;
-            this.track1PanRight.gain.value = pan1;
+        // バイパス時は処理をスキップ
+        if (this.isBypassed) {
+            this.applyBypassSettings();
+            return;
         }
         
-        if (this.track2PanLeft && this.track2PanRight) {
-            const pan2 = (track2Position.x + 1) / 2;
-            this.track2PanLeft.gain.value = 1 - pan2;
-            this.track2PanRight.gain.value = pan2;
+        // 距離を計算（-1から1の座標系を10mスケールに変換）
+        const distance1 = Math.sqrt(track1Position.x * track1Position.x + track1Position.z * track1Position.z) * this.maxDistance;
+        const distance2 = Math.sqrt(track2Position.x * track2Position.x + track2Position.z * track2Position.z) * this.maxDistance;
+        
+        // 距離減衰を計算（逆二乗の法則に基づく）
+        const distanceGain1 = this.calculateDistanceAttenuation(distance1);
+        const distanceGain2 = this.calculateDistanceAttenuation(distance2);
+        
+        if (this.track1DistanceGain) {
+            this.track1DistanceGain.gain.value = distanceGain1;
+        }
+        if (this.track2DistanceGain) {
+            this.track2DistanceGain.gain.value = distanceGain2;
         }
         
-        // 残響Mixを更新（Z座標に基づく距離とMix割合）
-        const distance1 = Math.sqrt(track1Position.x * track1Position.x + track1Position.z * track1Position.z);
-        const distance2 = Math.sqrt(track2Position.x * track2Position.x + track2Position.z * track2Position.z);
+        // モードに応じて処理を分岐
+        switch (this.mode) {
+            case 'mono-pan':
+                this.updateMonoPanMode(track1Position, track2Position);
+                break;
+            case 'channel-volume':
+                this.updateChannelVolumeMode(track1Position, track2Position);
+                break;
+            case 'stereo-width':
+                this.updateStereoWidthMode(track1Position, track2Position);
+                break;
+        }
         
-        const reverbAmount1 = (distance1 * reverbMix) / 100;
-        const reverbAmount2 = (distance2 * reverbMix) / 100;
+        // 残響Mixを更新（距離とMix割合）
+        const reverbAmount1 = Math.min(1, (distance1 / this.maxDistance) * (reverbMix / 100));
+        const reverbAmount2 = Math.min(1, (distance2 / this.maxDistance) * (reverbMix / 100));
         
         if (this.track1ReverbGain && this.track1DryGain) {
             this.track1ReverbGain.gain.value = reverbAmount1;
@@ -104,27 +161,214 @@ class SpatialDesignProcessor {
         }
     }
     
+    // モード1: LRミックス→モノラル→音像定位
+    updateMonoPanMode(track1Position, track2Position) {
+        // 左右チャンネルを0.5ずつに設定してモノラル化（LRミックス）
+        if (this.track1LeftVolume && this.track1RightVolume) {
+            this.track1LeftVolume.gain.value = 0.5;
+            this.track1RightVolume.gain.value = 0.5;
+        }
+        if (this.track2LeftVolume && this.track2RightVolume) {
+            this.track2LeftVolume.gain.value = 0.5;
+            this.track2RightVolume.gain.value = 0.5;
+        }
+        
+        // パンニングを更新（X座標に基づく、より正確な計算）
+        if (this.track1PanLeft && this.track1PanRight) {
+            const pan1 = (track1Position.x + 1) / 2; // 0から1に変換
+            const panAngle1 = pan1 * Math.PI / 2; // 0からπ/2に変換
+            this.track1PanLeft.gain.value = Math.cos(panAngle1);
+            this.track1PanRight.gain.value = Math.sin(panAngle1);
+        }
+        
+        if (this.track2PanLeft && this.track2PanRight) {
+            const pan2 = (track2Position.x + 1) / 2;
+            const panAngle2 = pan2 * Math.PI / 2;
+            this.track2PanLeft.gain.value = Math.cos(panAngle2);
+            this.track2PanRight.gain.value = Math.sin(panAngle2);
+        }
+    }
+    
+    // モード2: チャンネルボリュームの変更のみ
+    updateChannelVolumeMode(track1Position, track2Position) {
+        // X座標で左右チャンネルのボリュームを制御
+        // -1（左）: 左100%, 右0%
+        // 0（中央）: 左100%, 右100%
+        // 1（右）: 左0%, 右100%
+        if (this.track1LeftVolume && this.track1RightVolume) {
+            const leftVol1 = Math.max(0, 1 - track1Position.x); // -1で1.0, 1で0.0
+            const rightVol1 = Math.max(0, 1 + track1Position.x); // -1で0.0, 1で1.0
+            this.track1LeftVolume.gain.value = leftVol1;
+            this.track1RightVolume.gain.value = rightVol1;
+        }
+        
+        if (this.track2LeftVolume && this.track2RightVolume) {
+            const leftVol2 = Math.max(0, 1 - track2Position.x);
+            const rightVol2 = Math.max(0, 1 + track2Position.x);
+            this.track2LeftVolume.gain.value = leftVol2;
+            this.track2RightVolume.gain.value = rightVol2;
+        }
+        
+        // パンニングは使用しない（中央に設定）
+        if (this.track1PanLeft && this.track1PanRight) {
+            this.track1PanLeft.gain.value = 0.707;
+            this.track1PanRight.gain.value = 0.707;
+        }
+        if (this.track2PanLeft && this.track2PanRight) {
+            this.track2PanLeft.gain.value = 0.707;
+            this.track2PanRight.gain.value = 0.707;
+        }
+    }
+    
+    // モード3: ステレオ幅指定のL,R独立した空間配置
+    updateStereoWidthMode(track1Position, track2Position) {
+        // ステレオ幅に基づいて左右チャンネルを独立配置
+        // ステレオ幅100%: 通常のステレオ
+        // ステレオ幅0%: モノラル
+        // ステレオ幅200%: 超広いステレオ
+        const width = this.stereoWidth / 100; // 0.0 - 2.0
+        
+        // 左チャンネルの位置（X座標）
+        const leftPan1 = Math.max(-1, Math.min(1, track1Position.x - (1 - width) * 0.5));
+        const leftPan2 = Math.max(-1, Math.min(1, track2Position.x - (1 - width) * 0.5));
+        
+        // 右チャンネルの位置（X座標）
+        const rightPan1 = Math.max(-1, Math.min(1, track1Position.x + (1 - width) * 0.5));
+        const rightPan2 = Math.max(-1, Math.min(1, track2Position.x + (1 - width) * 0.5));
+        
+        // 左チャンネルのパンニング
+        if (this.track1PanLeft && this.track1LeftVolume) {
+            const pan1 = (leftPan1 + 1) / 2;
+            const panAngle1 = pan1 * Math.PI / 2;
+            this.track1PanLeft.gain.value = Math.cos(panAngle1);
+            this.track1LeftVolume.gain.value = 1.0;
+        }
+        
+        if (this.track2PanLeft && this.track2LeftVolume) {
+            const pan2 = (leftPan2 + 1) / 2;
+            const panAngle2 = pan2 * Math.PI / 2;
+            this.track2PanLeft.gain.value = Math.cos(panAngle2);
+            this.track2LeftVolume.gain.value = 1.0;
+        }
+        
+        // 右チャンネルのパンニング
+        if (this.track1PanRight && this.track1RightVolume) {
+            const pan1 = (rightPan1 + 1) / 2;
+            const panAngle1 = pan1 * Math.PI / 2;
+            this.track1PanRight.gain.value = Math.sin(panAngle1);
+            this.track1RightVolume.gain.value = 1.0;
+        }
+        
+        if (this.track2PanRight && this.track2RightVolume) {
+            const pan2 = (rightPan2 + 1) / 2;
+            const panAngle2 = pan2 * Math.PI / 2;
+            this.track2PanRight.gain.value = Math.sin(panAngle2);
+            this.track2RightVolume.gain.value = 1.0;
+        }
+    }
+    
+    // モードを設定
+    setMode(mode) {
+        this.mode = mode;
+        this.updateSpatialPosition(this.track1Position, this.track2Position, this.reverbMix);
+    }
+    
+    // ステレオ幅を設定
+    setStereoWidth(width) {
+        this.stereoWidth = Math.max(0, Math.min(200, width));
+        if (this.mode === 'stereo-width') {
+            this.updateSpatialPosition(this.track1Position, this.track2Position, this.reverbMix);
+        }
+    }
+    
+    // バイパス時の設定を適用（信号をそのまま通す）
+    applyBypassSettings() {
+        // 距離減衰を無効化（ゲイン1.0）
+        if (this.track1DistanceGain) {
+            this.track1DistanceGain.gain.value = 1.0;
+        }
+        if (this.track2DistanceGain) {
+            this.track2DistanceGain.gain.value = 1.0;
+        }
+        
+        // パンニングを中央（左右均等）
+        if (this.track1PanLeft && this.track1PanRight) {
+            // 中央 = 0.707 (1/√2) で左右均等
+            this.track1PanLeft.gain.value = 0.707;
+            this.track1PanRight.gain.value = 0.707;
+        }
+        if (this.track2PanLeft && this.track2PanRight) {
+            this.track2PanLeft.gain.value = 0.707;
+            this.track2PanRight.gain.value = 0.707;
+        }
+        
+        // 残響を無効化
+        if (this.track1ReverbGain && this.track1DryGain) {
+            this.track1ReverbGain.gain.value = 0;
+            this.track1DryGain.gain.value = 1;
+        }
+        if (this.track2ReverbGain && this.track2DryGain) {
+            this.track2ReverbGain.gain.value = 0;
+            this.track2DryGain.gain.value = 1;
+        }
+    }
+    
+    // バイパス状態を設定
+    setBypass(bypassed) {
+        this.isBypassed = bypassed;
+        // バイパス状態に応じて設定を更新
+        this.updateSpatialPosition(this.track1Position, this.track2Position, this.reverbMix);
+    }
+    
+    // バイパス状態を取得
+    getBypass() {
+        return this.isBypassed;
+    }
+    
+    // 距離減衰を計算（逆二乗の法則）
+    calculateDistanceAttenuation(distance) {
+        // 基準距離でのゲインを1として、距離に応じて減衰
+        // gain = referenceDistance^2 / (referenceDistance^2 + distance^2)
+        const refDistSq = this.referenceDistance * this.referenceDistance;
+        const distSq = distance * distance;
+        const gain = refDistSq / (refDistSq + distSq);
+        
+        // 最小ゲインを設定（完全に消音しないように）
+        return Math.max(0.01, gain);
+    }
+    
     // トラック1のオーディオノードを接続
     connectTrack1(inputNode, outputNode) {
         if (!inputNode || !outputNode) return;
         
-        // 入力からパンニングに分岐
+        // 距離減衰を最初に適用
+        inputNode.connect(this.track1DistanceGain);
+        
+        // チャンネル分離
         const splitter = this.audioContext.createChannelSplitter(2);
-        inputNode.connect(splitter);
+        this.track1DistanceGain.connect(splitter);
         
-        // 左チャンネル
-        splitter.connect(this.track1PanLeft, 0);
-        this.track1PanLeft.connect(outputNode, 0);
+        // 左チャンネル経路
+        splitter.connect(this.track1LeftVolume, 0);
+        this.track1LeftVolume.connect(this.track1PanLeft);
+        this.track1PanLeft.connect(outputNode, 0, 0);
         
-        // 右チャンネル
-        splitter.connect(this.track1PanRight, 1);
-        this.track1PanRight.connect(outputNode, 1);
+        // 右チャンネル経路
+        splitter.connect(this.track1RightVolume, 1);
+        this.track1RightVolume.connect(this.track1PanRight);
+        this.track1PanRight.connect(outputNode, 0, 1);
         
-        // 残響経路
-        inputNode.connect(this.track1DryGain);
+        // モノラル化経路（mono-panモード用）
+        // LRをミックスしてモノラル化
+        splitter.connect(this.track1MonoMerger, 0, 0);
+        splitter.connect(this.track1MonoMerger, 1, 0);
+        // モノラル化された信号はパンニング処理で使用（既存の接続を利用）
+        
+        // 残響経路（距離減衰後の信号から）
+        this.track1DistanceGain.connect(this.track1DryGain);
         this.track1DryGain.connect(outputNode);
         
-        inputNode.connect(this.track1Reverb);
+        this.track1DistanceGain.connect(this.track1Reverb);
         this.track1Reverb.connect(this.track1ReverbGain);
         this.track1ReverbGain.connect(outputNode);
     }
@@ -133,23 +377,34 @@ class SpatialDesignProcessor {
     connectTrack2(inputNode, outputNode) {
         if (!inputNode || !outputNode) return;
         
-        // 入力からパンニングに分岐
+        // 距離減衰を最初に適用
+        inputNode.connect(this.track2DistanceGain);
+        
+        // チャンネル分離
         const splitter = this.audioContext.createChannelSplitter(2);
-        inputNode.connect(splitter);
+        this.track2DistanceGain.connect(splitter);
         
-        // 左チャンネル
-        splitter.connect(this.track2PanLeft, 0);
-        this.track2PanLeft.connect(outputNode, 0);
+        // 左チャンネル経路
+        splitter.connect(this.track2LeftVolume, 0);
+        this.track2LeftVolume.connect(this.track2PanLeft);
+        this.track2PanLeft.connect(outputNode, 0, 0);
         
-        // 右チャンネル
-        splitter.connect(this.track2PanRight, 1);
-        this.track2PanRight.connect(outputNode, 1);
+        // 右チャンネル経路
+        splitter.connect(this.track2RightVolume, 1);
+        this.track2RightVolume.connect(this.track2PanRight);
+        this.track2PanRight.connect(outputNode, 0, 1);
         
-        // 残響経路
-        inputNode.connect(this.track2DryGain);
+        // モノラル化経路（mono-panモード用）
+        // LRをミックスしてモノラル化
+        splitter.connect(this.track2MonoMerger, 0, 0);
+        splitter.connect(this.track2MonoMerger, 1, 0);
+        // モノラル化された信号はパンニング処理で使用（既存の接続を利用）
+        
+        // 残響経路（距離減衰後の信号から）
+        this.track2DistanceGain.connect(this.track2DryGain);
         this.track2DryGain.connect(outputNode);
         
-        inputNode.connect(this.track2Reverb);
+        this.track2DistanceGain.connect(this.track2Reverb);
         this.track2Reverb.connect(this.track2ReverbGain);
         this.track2ReverbGain.connect(outputNode);
     }

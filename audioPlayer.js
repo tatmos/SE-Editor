@@ -20,11 +20,19 @@ class AudioPlayer {
         this.masterChannelSplitter = null; // チャンネル分離用
         this.masterChannelAnalysers = []; // 各チャンネル用のアナライザー
         this.maxChannels = 2; // 最大チャンネル数
+        
+        // 空間デザイン用プロセッサー
+        this.spatialDesignProcessor = null;
     }
 
     // ループメーカー側からマルチバンドプロセッサーを受け取る
     setMultiBandProcessor(processor) {
         this.multibandCompProcessor = processor;
+    }
+    
+    // ループメーカー側から空間デザインプロセッサーを受け取る
+    setSpatialDesignProcessor(processor) {
+        this.spatialDesignProcessor = processor;
     }
 
     // トラック1と2の加工後のバッファを再生（トラック1の加工後の範囲でループ）
@@ -54,25 +62,12 @@ class AudioPlayer {
             source1.loopStart = 0;
             source1.loopEnd = loopDuration; // トラック1の加工後の範囲でループ
             
-            source1.connect(this.gainNode1);
-            // レベルメーター用（個別トラックの音量表示）
-            this.gainNode1.connect(this.analyser1);
-            
             // トラック2: 加工後のバッファをループ再生（トラック1と同じ範囲でループ）
             const source2 = this.audioContext.createBufferSource();
-            this.gainNode2 = this.audioContext.createGain();
-            this.analyser2 = this.audioContext.createAnalyser();
-            this.analyser2.fftSize = 256;
-            this.analyser2.smoothingTimeConstant = 0.8;
-            
             source2.buffer = track2Buffer;
             source2.loop = true;
             source2.loopStart = 0;
             source2.loopEnd = loopDuration; // トラック1と同じ範囲でループ
-            
-            source2.connect(this.gainNode2);
-            // レベルメーター用
-            this.gainNode2.connect(this.analyser2);
 
             // マスターバス（2トラックをまとめて3バンド処理）
             this.masterBus = this.audioContext.createGain();
@@ -82,9 +77,64 @@ class AudioPlayer {
             this.masterAnalyser.fftSize = 2048; // より高解像度なスペクトラム分析
             this.masterAnalyser.smoothingTimeConstant = 0.8;
 
-            // 各トラックの出力をマスターバスへ
-            this.gainNode1.connect(this.masterBus);
-            this.gainNode2.connect(this.masterBus);
+            // 空間デザイン処理を適用するかどうか
+            if (this.spatialDesignProcessor && 
+                this.spatialDesignProcessor.connectTrack1 && 
+                this.spatialDesignProcessor.connectTrack2) {
+                // 空間デザイン処理を適用
+                // 各トラック用のステレオ出力ノード（ChannelMerger）を作成
+                const track1Output = this.audioContext.createChannelMerger(2);
+                const track2Output = this.audioContext.createChannelMerger(2);
+                
+                // トラック1: ソース -> Gain -> 空間デザイン -> 出力マージャー -> マスターバス
+                this.gainNode1 = this.audioContext.createGain();
+                this.analyser1 = this.audioContext.createAnalyser();
+                this.analyser1.fftSize = 256;
+                this.analyser1.smoothingTimeConstant = 0.8;
+                
+                source1.connect(this.gainNode1);
+                // レベルメーター用（空間デザイン処理前の信号）
+                this.gainNode1.connect(this.analyser1);
+                
+                // 空間デザイン処理を接続（出力はChannelMerger）
+                this.spatialDesignProcessor.connectTrack1(this.gainNode1, track1Output);
+                track1Output.connect(this.masterBus);
+                
+                // トラック2: ソース -> Gain -> 空間デザイン -> 出力マージャー -> マスターバス
+                this.gainNode2 = this.audioContext.createGain();
+                this.analyser2 = this.audioContext.createAnalyser();
+                this.analyser2.fftSize = 256;
+                this.analyser2.smoothingTimeConstant = 0.8;
+                
+                source2.connect(this.gainNode2);
+                // レベルメーター用（空間デザイン処理前の信号）
+                this.gainNode2.connect(this.analyser2);
+                
+                // 空間デザイン処理を接続（出力はChannelMerger）
+                this.spatialDesignProcessor.connectTrack2(this.gainNode2, track2Output);
+                track2Output.connect(this.masterBus);
+            } else {
+                // 空間デザイン処理なし（従来の接続）
+                this.gainNode1 = this.audioContext.createGain();
+                this.analyser1 = this.audioContext.createAnalyser();
+                this.analyser1.fftSize = 256;
+                this.analyser1.smoothingTimeConstant = 0.8;
+                
+                source1.connect(this.gainNode1);
+                this.gainNode1.connect(this.analyser1);
+                
+                this.gainNode2 = this.audioContext.createGain();
+                this.analyser2 = this.audioContext.createAnalyser();
+                this.analyser2.fftSize = 256;
+                this.analyser2.smoothingTimeConstant = 0.8;
+                
+                source2.connect(this.gainNode2);
+                this.gainNode2.connect(this.analyser2);
+                
+                // 各トラックの出力をマスターバスへ
+                this.gainNode1.connect(this.masterBus);
+                this.gainNode2.connect(this.masterBus);
+            }
             
             // 最大チャンネル数を取得（トラック1とトラック2の最大値）
             const channels1 = track1Buffer ? track1Buffer.numberOfChannels : 1;
@@ -228,17 +278,31 @@ class AudioPlayer {
     }
     
     // マスターバスの周波数スペクトラムデータを取得
-    getFrequencyData() {
-        if (!this.masterAnalyser) return null;
+    // channel: 'mix' (デフォルト), 'l' (左), 'r' (右)
+    getFrequencyData(channel = 'mix') {
+        let analyser = null;
         
-        const bufferLength = this.masterAnalyser.frequencyBinCount;
+        if (channel === 'mix') {
+            analyser = this.masterAnalyser;
+        } else if (channel === 'l' && this.masterChannelAnalysers && this.masterChannelAnalysers.length > 0) {
+            analyser = this.masterChannelAnalysers[0];
+        } else if (channel === 'r' && this.masterChannelAnalysers && this.masterChannelAnalysers.length > 1) {
+            analyser = this.masterChannelAnalysers[1];
+        } else {
+            // フォールバック: チャンネルが存在しない場合はMixを使用
+            analyser = this.masterAnalyser;
+        }
+        
+        if (!analyser) return null;
+        
+        const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-        this.masterAnalyser.getByteFrequencyData(dataArray);
+        analyser.getByteFrequencyData(dataArray);
         
         return {
             data: dataArray,
             sampleRate: this.audioContext.sampleRate,
-            fftSize: this.masterAnalyser.fftSize
+            fftSize: analyser.fftSize
         };
     }
     

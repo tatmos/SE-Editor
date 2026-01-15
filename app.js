@@ -499,7 +499,8 @@ class LoopMaker {
             }
         } else {
             // スペクトラム/ソノグラムモード: 周波数データを取得
-            const freqData = this.audioPlayer.getFrequencyData();
+            const channel = this.spectrumAnalyzer.channel || 'mix';
+            const freqData = this.audioPlayer.getFrequencyData(channel);
             if (freqData) {
                 this.spectrumAnalyzer.draw(
                     freqData.data,
@@ -572,6 +573,11 @@ class LoopMaker {
         if (spatialCanvas && !this.spatialDesignUI) {
             this.spatialDesignProcessor = new SpatialDesignProcessor(this.audioContext);
             this.spatialDesignUI = new SpatialDesignUI(spatialCanvas, this.spatialDesignProcessor);
+            
+            // AudioPlayerに空間デザインプロセッサーを設定
+            if (this.audioPlayer && this.audioPlayer.setSpatialDesignProcessor) {
+                this.audioPlayer.setSpatialDesignProcessor(this.spatialDesignProcessor);
+            }
         }
     }
     

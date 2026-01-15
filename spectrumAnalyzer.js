@@ -9,6 +9,9 @@ class SpectrumAnalyzer {
         // 表示モード: 'spectrum'、'sonogram'、または 'waveform'
         this.mode = 'spectrum';
         
+        // チャンネル選択: 'mix' (デフォルト), 'l' (左), 'r' (右)
+        this.channel = 'mix';
+        
         // ソノグラム用のデータバッファ（時間×周波数の2次元配列）
         this.sonogramData = [];
         this.sonogramColumnIndex = 0; // 現在描画している列のインデックス
@@ -51,6 +54,56 @@ class SpectrumAnalyzer {
         
         // 更新頻度スライダーのイベントリスナーを設定
         this.setupUpdateRateSlider();
+        
+        // チャンネル選択ボタンのイベントリスナーを設定
+        this.setupChannelButtons();
+    }
+    
+    setupChannelButtons() {
+        const mixBtn = document.getElementById('spectrum-channel-mix');
+        const lBtn = document.getElementById('spectrum-channel-l');
+        const rBtn = document.getElementById('spectrum-channel-r');
+        
+        if (mixBtn) {
+            mixBtn.addEventListener('click', () => {
+                this.setChannel('mix');
+            });
+        }
+        
+        if (lBtn) {
+            lBtn.addEventListener('click', () => {
+                this.setChannel('l');
+            });
+        }
+        
+        if (rBtn) {
+            rBtn.addEventListener('click', () => {
+                this.setChannel('r');
+            });
+        }
+    }
+    
+    setChannel(channel) {
+        this.channel = channel;
+        
+        // ボタンの状態を更新
+        const mixBtn = document.getElementById('spectrum-channel-mix');
+        const lBtn = document.getElementById('spectrum-channel-l');
+        const rBtn = document.getElementById('spectrum-channel-r');
+        
+        if (mixBtn && lBtn && rBtn) {
+            mixBtn.classList.remove('active');
+            lBtn.classList.remove('active');
+            rBtn.classList.remove('active');
+            
+            if (channel === 'mix') {
+                mixBtn.classList.add('active');
+            } else if (channel === 'l') {
+                lBtn.classList.add('active');
+            } else if (channel === 'r') {
+                rBtn.classList.add('active');
+            }
+        }
     }
     
     setupModeButtons() {

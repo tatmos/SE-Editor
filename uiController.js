@@ -40,6 +40,8 @@ class UIController {
         this.toggleSettingsTrack2Btn = document.getElementById('toggle-settings-track2');
         this.trackSettings1 = document.getElementById('track-settings-1');
         this.trackSettings2 = document.getElementById('track-settings-2');
+        this.toggleSpatialDesignBtn = document.getElementById('toggle-spatial-design');
+        this.spatialControls = document.getElementById('spatial-controls');
         
         // ミュート状態
         this.track1Muted = false;
@@ -92,6 +94,9 @@ class UIController {
         }
         if (this.toggleSettingsTrack2Btn) {
             this.toggleSettingsTrack2Btn.addEventListener('click', () => this.toggleTrackSettings(2));
+        }
+        if (this.toggleSpatialDesignBtn) {
+            this.toggleSpatialDesignBtn.addEventListener('click', () => this.toggleSpatialDesign());
         }
 
         // ドロップオーバーレイボタン（元波形1）
@@ -508,6 +513,32 @@ class UIController {
             settings.classList.add('hidden');
             button.textContent = '▼';
             button.classList.remove('open');
+        }
+    }
+
+    toggleSpatialDesign() {
+        if (!this.spatialControls || !this.toggleSpatialDesignBtn) return;
+        
+        const isHidden = this.spatialControls.classList.contains('hidden');
+        
+        if (isHidden) {
+            // 開く
+            this.spatialControls.classList.remove('hidden');
+            this.toggleSpatialDesignBtn.textContent = '▲';
+            this.toggleSpatialDesignBtn.classList.add('open');
+            
+            // キャンバスの表示更新
+            if (this.loopMaker.spatialDesignUI) {
+                // キャンバスのサイズが正しく設定されるように少し遅延させる
+                setTimeout(() => {
+                    this.loopMaker.spatialDesignUI.render();
+                }, 10);
+            }
+        } else {
+            // 閉じる
+            this.spatialControls.classList.add('hidden');
+            this.toggleSpatialDesignBtn.textContent = '▼';
+            this.toggleSpatialDesignBtn.classList.remove('open');
         }
     }
 
