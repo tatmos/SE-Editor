@@ -31,8 +31,10 @@ class LoopMaker {
         const canvas2 = document.getElementById('waveform-track2');
         const ruler1 = document.getElementById('ruler-track1');
         const ruler2 = document.getElementById('ruler-track2');
-        this.levelMeter1 = document.getElementById('level-meter-track1');
-        this.levelMeter2 = document.getElementById('level-meter-track2');
+        this.levelMeter1L = document.getElementById('level-meter-track1-l');
+        this.levelMeter1R = document.getElementById('level-meter-track1-r');
+        this.levelMeter2L = document.getElementById('level-meter-track2-l');
+        this.levelMeter2R = document.getElementById('level-meter-track2-r');
         this.processedLevelMetersContainer = document.getElementById('processed-level-meters');
         const spectrumCanvas = document.getElementById('spectrum-canvas');
         
@@ -403,6 +405,14 @@ class LoopMaker {
     }
 
     startPlaybackAnimation() {
+        // 元波形ビューアーに再生状態を通知
+        if (this.originalWaveformViewer1) {
+            this.originalWaveformViewer1.setPlaybackActive(true);
+        }
+        if (this.originalWaveformViewer2) {
+            this.originalWaveformViewer2.setPlaybackActive(true);
+        }
+        
         const animate = () => {
             if (this.audioPlayer && this.audioPlayer.isPlaying) {
                 this.drawWaveforms();
@@ -421,20 +431,39 @@ class LoopMaker {
     updateLevelMeters() {
         if (!this.audioPlayer) return;
 
-        const level1 = this.audioPlayer.getLevel(1);
-        const level2 = this.audioPlayer.getLevel(2);
+        // トラック1のL/Rレベル
+        const level1L = this.audioPlayer.getChannelLevel(1, 'l');
+        const level1R = this.audioPlayer.getChannelLevel(1, 'r');
 
-        if (this.levelMeter1) {
-            const bar1 = this.levelMeter1.querySelector('.level-bar');
-            if (bar1) {
-                bar1.style.height = (level1 * 100) + '%';
+        if (this.levelMeter1L) {
+            const bar1L = this.levelMeter1L.querySelector('.level-bar');
+            if (bar1L) {
+                bar1L.style.height = (level1L * 100) + '%';
             }
         }
 
-        if (this.levelMeter2) {
-            const bar2 = this.levelMeter2.querySelector('.level-bar');
-            if (bar2) {
-                bar2.style.height = (level2 * 100) + '%';
+        if (this.levelMeter1R) {
+            const bar1R = this.levelMeter1R.querySelector('.level-bar');
+            if (bar1R) {
+                bar1R.style.height = (level1R * 100) + '%';
+            }
+        }
+
+        // トラック2のL/Rレベル
+        const level2L = this.audioPlayer.getChannelLevel(2, 'l');
+        const level2R = this.audioPlayer.getChannelLevel(2, 'r');
+
+        if (this.levelMeter2L) {
+            const bar2L = this.levelMeter2L.querySelector('.level-bar');
+            if (bar2L) {
+                bar2L.style.height = (level2L * 100) + '%';
+            }
+        }
+
+        if (this.levelMeter2R) {
+            const bar2R = this.levelMeter2R.querySelector('.level-bar');
+            if (bar2R) {
+                bar2R.style.height = (level2R * 100) + '%';
             }
         }
         
@@ -535,6 +564,14 @@ class LoopMaker {
     }
 
     stopPlaybackAnimation() {
+        // 元波形ビューアーに再生停止状態を通知
+        if (this.originalWaveformViewer1) {
+            this.originalWaveformViewer1.setPlaybackActive(false);
+        }
+        if (this.originalWaveformViewer2) {
+            this.originalWaveformViewer2.setPlaybackActive(false);
+        }
+        
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId);
             this.animationFrameId = null;

@@ -23,6 +23,12 @@ class AudioPlayer {
         
         // 空間デザイン用プロセッサー
         this.spatialDesignProcessor = null;
+        
+        // 各トラック用のチャンネル分離アナライザー（L/R表示用）
+        this.track1ChannelSplitter = null;
+        this.track1ChannelAnalysers = []; // [L, R]
+        this.track2ChannelSplitter = null;
+        this.track2ChannelAnalysers = []; // [L, R]
     }
 
     // ループメーカー側からマルチバンドプロセッサーを受け取る
@@ -39,6 +45,9 @@ class AudioPlayer {
     // offsetSeconds: 再生開始位置（秒）
     playPreviewWithBuffers(track1Buffer, track2Buffer, offsetSeconds = 0) {
         if (!track1Buffer || !track2Buffer || this.isPlaying) return false;
+
+        // 既存の接続を確実にクリーンアップ
+        this.stopPreview();
 
         try {
             // トラック1の加工後のバッファの長さをループ期間として使用
@@ -96,6 +105,18 @@ class AudioPlayer {
                 // レベルメーター用（空間デザイン処理前の信号）
                 this.gainNode1.connect(this.analyser1);
                 
+                // トラック1用のチャンネル分離アナライザー（L/R表示用）
+                this.track1ChannelSplitter = this.audioContext.createChannelSplitter(2);
+                this.gainNode1.connect(this.track1ChannelSplitter);
+                this.track1ChannelAnalysers = [];
+                for (let i = 0; i < 2; i++) {
+                    const analyser = this.audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    analyser.smoothingTimeConstant = 0.8;
+                    this.track1ChannelSplitter.connect(analyser, i);
+                    this.track1ChannelAnalysers.push(analyser);
+                }
+                
                 // 空間デザイン処理を接続（出力はChannelMerger）
                 this.spatialDesignProcessor.connectTrack1(this.gainNode1, track1Output);
                 track1Output.connect(this.masterBus);
@@ -110,6 +131,18 @@ class AudioPlayer {
                 // レベルメーター用（空間デザイン処理前の信号）
                 this.gainNode2.connect(this.analyser2);
                 
+                // トラック2用のチャンネル分離アナライザー（L/R表示用）
+                this.track2ChannelSplitter = this.audioContext.createChannelSplitter(2);
+                this.gainNode2.connect(this.track2ChannelSplitter);
+                this.track2ChannelAnalysers = [];
+                for (let i = 0; i < 2; i++) {
+                    const analyser = this.audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    analyser.smoothingTimeConstant = 0.8;
+                    this.track2ChannelSplitter.connect(analyser, i);
+                    this.track2ChannelAnalysers.push(analyser);
+                }
+                
                 // 空間デザイン処理を接続（出力はChannelMerger）
                 this.spatialDesignProcessor.connectTrack2(this.gainNode2, track2Output);
                 track2Output.connect(this.masterBus);
@@ -123,6 +156,18 @@ class AudioPlayer {
                 source1.connect(this.gainNode1);
                 this.gainNode1.connect(this.analyser1);
                 
+                // トラック1用のチャンネル分離アナライザー（L/R表示用）
+                this.track1ChannelSplitter = this.audioContext.createChannelSplitter(2);
+                this.gainNode1.connect(this.track1ChannelSplitter);
+                this.track1ChannelAnalysers = [];
+                for (let i = 0; i < 2; i++) {
+                    const analyser = this.audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    analyser.smoothingTimeConstant = 0.8;
+                    this.track1ChannelSplitter.connect(analyser, i);
+                    this.track1ChannelAnalysers.push(analyser);
+                }
+                
                 this.gainNode2 = this.audioContext.createGain();
                 this.analyser2 = this.audioContext.createAnalyser();
                 this.analyser2.fftSize = 256;
@@ -130,6 +175,18 @@ class AudioPlayer {
                 
                 source2.connect(this.gainNode2);
                 this.gainNode2.connect(this.analyser2);
+                
+                // トラック2用のチャンネル分離アナライザー（L/R表示用）
+                this.track2ChannelSplitter = this.audioContext.createChannelSplitter(2);
+                this.gainNode2.connect(this.track2ChannelSplitter);
+                this.track2ChannelAnalysers = [];
+                for (let i = 0; i < 2; i++) {
+                    const analyser = this.audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    analyser.smoothingTimeConstant = 0.8;
+                    this.track2ChannelSplitter.connect(analyser, i);
+                    this.track2ChannelAnalysers.push(analyser);
+                }
                 
                 // 各トラックの出力をマスターバスへ
                 this.gainNode1.connect(this.masterBus);
@@ -146,7 +203,7 @@ class AudioPlayer {
             this.masterChannelAnalysers = [];
             for (let i = 0; i < this.maxChannels; i++) {
                 const analyser = this.audioContext.createAnalyser();
-                analyser.fftSize = 256;
+                analyser.fftSize = 2048; // マスターバスと同じ高解像度に設定
                 analyser.smoothingTimeConstant = 0.8;
                 this.masterChannelAnalysers.push(analyser);
             }
@@ -194,7 +251,11 @@ class AudioPlayer {
                     this.masterBus,
                     this.masterAnalyser,
                     this.masterChannelSplitter,
-                    ...this.masterChannelAnalysers
+                    ...this.masterChannelAnalysers,
+                    this.track1ChannelSplitter,
+                    ...this.track1ChannelAnalysers,
+                    this.track2ChannelSplitter,
+                    ...this.track2ChannelAnalysers
                 ];
             } else {
                 // マルチバンド未設定の場合は従来通り masterBus から直接出力
@@ -216,7 +277,11 @@ class AudioPlayer {
                     this.masterBus,
                     this.masterAnalyser,
                     this.masterChannelSplitter,
-                    ...this.masterChannelAnalysers
+                    ...this.masterChannelAnalysers,
+                    this.track1ChannelSplitter,
+                    ...this.track1ChannelAnalysers,
+                    this.track2ChannelSplitter,
+                    ...this.track2ChannelAnalysers
                 ];
             }
             this.loopDuration = loopDuration;
@@ -273,6 +338,21 @@ class AudioPlayer {
         this.masterChannelSplitter = null;
         this.masterChannelAnalysers = [];
         this.maxChannels = 2;
+        this.track1ChannelSplitter = null;
+        this.track1ChannelAnalysers = [];
+        this.track2ChannelSplitter = null;
+        this.track2ChannelAnalysers = [];
+        
+        // 空間デザインプロセッサーの接続を切断
+        if (this.spatialDesignProcessor) {
+            if (this.spatialDesignProcessor.disconnectTrack1) {
+                this.spatialDesignProcessor.disconnectTrack1();
+            }
+            if (this.spatialDesignProcessor.disconnectTrack2) {
+                this.spatialDesignProcessor.disconnectTrack2();
+            }
+        }
+        
         this.startTime = null;
         this.isPlaying = false;
     }
@@ -347,6 +427,31 @@ class AudioPlayer {
         const average = sum / dataArray.length;
         
         // 0-100の範囲に正規化
+        return average / 255;
+    }
+    
+    // トラックのチャンネル別レベルを取得
+    // trackNumber: 1 or 2
+    // channel: 'l' (左) or 'r' (右)
+    getChannelLevel(trackNumber, channel) {
+        const channelAnalysers = trackNumber === 1 ? this.track1ChannelAnalysers : this.track2ChannelAnalysers;
+        if (!channelAnalysers || channelAnalysers.length < 2) return 0;
+        
+        const channelIndex = channel === 'l' ? 0 : 1;
+        const analyser = channelAnalysers[channelIndex];
+        if (!analyser) return 0;
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+        
+        // 平均音量を計算
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+        
+        // 0-1の範囲に正規化
         return average / 255;
     }
     

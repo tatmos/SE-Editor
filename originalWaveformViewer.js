@@ -10,8 +10,14 @@ class OriginalWaveformViewer {
         this.isDragging = false;
         this.dragType = null; // 'start' or 'end'
         this.onRangeChange = null; // コールバック関数
+        this.isPlaybackActive = false; // 再生中かどうか
         
         this.setupEventListeners();
+    }
+    
+    // 再生状態を設定
+    setPlaybackActive(active) {
+        this.isPlaybackActive = active;
     }
 
     lockScroll() {
@@ -103,6 +109,11 @@ class OriginalWaveformViewer {
     handleMouseDown(e) {
         if (!this.audioBuffer) return;
         
+        // 再生中は範囲変更を無効化
+        if (this.isPlaybackActive) {
+            return;
+        }
+        
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const width = this.canvas.width;
@@ -146,6 +157,15 @@ class OriginalWaveformViewer {
     handleMouseMove(e) {
         if (!this.audioBuffer) return;
         
+        // 再生中は範囲変更を無効化
+        if (this.isPlaybackActive && this.isDragging) {
+            this.isDragging = false;
+            this.dragType = null;
+            this.unlockScroll();
+            this.canvas.style.cursor = '';
+            return;
+        }
+        
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const width = this.canvas.width;
@@ -169,9 +189,7 @@ class OriginalWaveformViewer {
                 }
             }
             this.render();
-            if (this.onRangeChange) {
-                this.onRangeChange(this.startTime, this.endTime);
-            }
+            // ドラッグ中は範囲変更を呼ばない（ドラッグ終了時のみ）
         } else {
             // ハンドルの上にマウスがあるかチェック
             const startX = this.startTime * timeScale;
@@ -194,6 +212,11 @@ class OriginalWaveformViewer {
             this.dragType = null;
             this.canvas.style.cursor = 'default';
             this.unlockScroll();
+            
+            // 範囲変更を通知（ドラッグ終了時のみ、再生中でない場合のみ）
+            if (!this.isPlaybackActive && this.onRangeChange) {
+                this.onRangeChange(this.startTime, this.endTime);
+            }
         }
     }
 
